@@ -1,0 +1,21 @@
+[package]
+name = "web"
+version.workspace = true
+edition.workspace = true
+description = "Axum web server — interactive training app"
+
+[[bin]]
+name = "train-modern-ai-web"
+path = "src/main.rs"
+
+[dependencies]
+physics = { path = "../physics" }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+ndarray = { workspace = true }

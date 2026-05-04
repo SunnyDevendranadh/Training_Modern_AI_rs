@@ -1,0 +1,12 @@
+[package]
+name = "cli"
+version.workspace = true
+edition.workspace = true
+description = "CLI for running experiments and serving the web app"
+
+[dependencies]
+physics = { path = "../physics" }
+experiments = { path = "../experiments" }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

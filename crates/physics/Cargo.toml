@@ -1,0 +1,14 @@
+[package]
+name = "physics"
+version.workspace = true
+edition.workspace = true
+description = "Core physics and economics computations for transformer inference"
+
+[dependencies]
+ndarray = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }
