@@ -12,7 +12,7 @@
 //! - Harness pricing models
 //! - Throughput vs perfection trade-offs
 //!
-//! All modules are pure functions with no side effects, designed for
+//! All modules expose pure functions with no side effects, designed for
 //! testability and reuse across the web app, CLI experiments, and tests.
 
 pub mod agents;
