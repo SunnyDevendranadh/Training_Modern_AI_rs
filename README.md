@@ -26,8 +26,8 @@ cargo run -p cli -- run roofline
 │                    Cargo Workspace                    │
 ├─────────┬──────────────┬──────────────┬─────────────┤
 │ physics │ experiments  │     web      │     cli     │
-│ (core)  │ (14 static)  │ (Axum API)   │ (entry)      │
-│ 71 tests│  14 tests    │   6 endpoints│              │
+│ (core)  │ (14 static)  │ (Axum SSR)   │ (entry)      │
+│ 71 tests│  14 tests    │ 9 HTML pages │              │
 ├─────────┴──────────────┴──────────────┴─────────────┤
 │                85 total tests passing                 │
 └─────────────────────────────────────────────────────┘
@@ -59,23 +59,38 @@ cargo run -p cli -- run roofline
 | 13 | Harness Pricing | OpenAI sandbox vs Anthropic MCP |
 | 14 | Context Economics | 8KB uses <1% of context window |
 
-## Web API
+## Web app
+
+Every page is **server-rendered HTML**. Forms submit via GET, the server runs
+the physics, and the response is a complete document with embedded SVG charts.
+No client JavaScript is required — the browser only renders.
 
 ```
-GET /api/roofline      → balance point, latency
-GET /api/cost          → cost per million tokens by batch size
-GET /api/context       → crossover context length
-GET /api/agents_md     → optimal AGENTS.md size & success rate
-GET /api/coordination  → multi-agent scaling curves
-GET /api/health        → {"status": "ok"}
+GET /             → home, key insights, module index
+GET /roofline     → latency vs batch size (form + chart + table)
+GET /cost         → $ per million tokens (form + chart + table)
+GET /context      → KV cache wall (form + chart + table)
+GET /scaling      → pretrain vs inference cost (form + chart + table)
+GET /pricing      → OpenAI vs Anthropic (form + chart + table)
+GET /agents-md    → AGENTS.md effectiveness (form + chart + table)
+GET /coordination → multi-agent scaling (form + chart + table)
+GET /throughput   → blocking vs minimally-blocking (form + chart + table)
+GET /api/health   → {"status": "ok"}
+```
+
+URLs are shareable: every parameter is a query string. Example:
+
+```
+http://127.0.0.1:2718/roofline?n_active=37e9&context=131072&bytes_per_param=0.5
 ```
 
 ## Differences from Python original
 
 | Aspect | Python (Marimo) | Rust |
 |--------|-----------------|------|
-| UI | Marimo reactive notebook | Axum JSON API + static HTML |
-| Charts | Plotly (interactive) | Text summaries (Python handles viz) |
+| UI | Marimo reactive notebook | Server-rendered HTML + SVG |
+| Client deps | Plotly + JS | None — plain HTML, no JS |
+| Charts | Plotly (interactive) | Pure-Rust SVG (zero deps) |
 | Package mgmt | uv | Cargo |
 | Types | Dynamic | Static, serde-serializable |
 | Concurrency | Single-threaded | Tokio async |

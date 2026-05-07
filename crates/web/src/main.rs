@@ -1,7 +1,9 @@
-//! Training Modern AI — Web Server
+//! Training Modern AI — Axum web server entry point.
 
 use std::env;
 
+mod chart;
+mod render;
 mod routes;
 
 #[tokio::main]
@@ -16,9 +18,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     println!("Training Modern AI — Rust Edition");
-    println!("  http://{addr}");
-    println!("  API: /api/roofline, /api/cost, /api/context");
-    println!("       /api/agents_md, /api/coordination, /api/health");
+    println!("  Listening on http://{addr}");
+    println!("  Open the URL in a browser. All pages are server-rendered HTML.");
 
     axum::serve(listener, app).await?;
     Ok(())

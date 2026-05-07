@@ -47,13 +47,13 @@ training-modern-ai-rs/
 │   │   │   └── harness/       # 7 harness experiments
 │   │   └── tests/             # (inline — 14 tests)
 │   │
-│   ├── web/                   # Axum web server (Marimo replacement)
+│   ├── web/                   # Axum web server — server-rendered HTML
 │   │   ├── src/
 │   │   │   ├── main.rs        # binary entry point
 │   │   │   ├── lib.rs
-│   │   │   ├── routes.rs      # 6 JSON API endpoints
-│   │   │   └── templates/
-│   │   │       └── index.html
+│   │   │   ├── routes.rs      # 9 HTML pages + /api/health
+│   │   │   ├── render.rs      # HTML layout, forms, tables, stats
+│   │   │   └── chart.rs       # pure-Rust SVG line/bar charts
 │   │   └── tests/
 │   │
 │   └── cli/                   # CLI (run experiments, serve web)
@@ -79,7 +79,7 @@ PORT=8080 cargo run -p web          # custom port
 - **ndarray**: Use `ndarray::Array1<f64>` for vectorized computations. Avoid raw loops where ndarray operations suffice.
 - **Constants**: All hardware/model constants live in `physics::constants`. Use them, don't re-derive.
 - **Types**: Shared types in `physics::types`. Serde-serializable for API responses.
-- **Web API**: JSON-only. Each endpoint returns computed results. The HTML template is static with JS fetch.
+- **Web app**: Fully server-rendered. Each route returns a complete HTML document with forms, computed results, and embedded SVG charts. No client JavaScript. Forms submit via GET so URLs are shareable.
 - **No external plotting**: The experiments crate outputs text summaries. Full chart generation remains in Python `experiments/` and `Harness/experiments/` directories.
 
 ## 5. Crate dependency graph
