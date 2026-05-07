@@ -181,6 +181,13 @@ pub fn fmt_f(v: f64, decimals: usize) -> String {
     if v.is_infinite() {
         return "∞".into();
     }
+    // Promote precision when the value is small enough that the requested
+    // precision would round to zero (e.g. 0.022 with decimals=1 should show
+    // as 0.02, not 0.0).
+    if v != 0.0 && v.abs() < 10f64.powi(-(decimals as i32)) {
+        let extra = (-(v.abs().log10().floor() as i32)).max(decimals as i32 + 1) as usize;
+        return format!("{:.*}", extra.min(6), v);
+    }
     format!("{:.*}", decimals, v)
 }
 
@@ -228,9 +235,18 @@ pub fn fmt_eng(v: f64) -> String {
 }
 
 pub fn fmt_usd(v: f64) -> String {
-    if v >= 1.0 {
+    let a = v.abs();
+    if a >= 1e12 {
+        format!("${:.2}T", v / 1e12)
+    } else if a >= 1e9 {
+        format!("${:.2}B", v / 1e9)
+    } else if a >= 1e6 {
+        format!("${:.2}M", v / 1e6)
+    } else if a >= 1e3 {
+        format!("${:.2}k", v / 1e3)
+    } else if a >= 1.0 {
         format!("${:.2}", v)
-    } else if v >= 1e-2 {
+    } else if a >= 1e-2 {
         format!("${:.4}", v)
     } else {
         format!("${:.6}", v)

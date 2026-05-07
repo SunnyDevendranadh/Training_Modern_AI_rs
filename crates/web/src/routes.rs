@@ -272,20 +272,27 @@ async fn cost(Query(p): Query<CostParams>) -> Html<String> {
     let (total_lat, _, _, _) =
         total_latency(&bs, n_active, n_total, &ctx_arr, bpp, BYTES_PER_TOKEN, FLOPS, MEM_BW);
 
-    let (min_idx, _) = cost_arr
-        .indexed_iter()
-        .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        .unwrap();
-    let opt_batch = bs[min_idx];
-    let opt_cost = cost_arr[min_idx];
-    let opt_lat = total_lat[min_idx] * 1000.0;
     let floor = physics::cost::compute_cost_floor(n_active, FLOPS, rc);
+    // "Knee" of the cost curve: the smallest batch where the cost is within
+    // 10% of the asymptotic compute floor. This is a useful operating point —
+    // beyond it, larger batches buy almost no further cost reduction but cost
+    // a lot of latency.
+    let knee_idx = (0..cost_arr.len())
+        .find(|&i| cost_arr[i] <= floor * 1.10)
+        .unwrap_or(cost_arr.len() - 1);
+    let knee_batch = bs[knee_idx];
+    let knee_cost = cost_arr[knee_idx];
+    let knee_lat = total_lat[knee_idx] * 1000.0;
 
     let stats = stats_grid(&[
-        Stat::new("Cost-min batch", fmt_eng(opt_batch), "Where $/M tokens bottoms out"),
-        Stat::new("Cost at min", fmt_usd(opt_cost), "$ per million tokens"),
-        Stat::new("Latency at min", format!("{} ms", fmt_f(opt_lat, 1)), "Latency you pay for the min cost"),
-        Stat::new("Compute floor", fmt_usd(floor), "Asymptotic cost at infinite batch"),
+        Stat::new("Compute floor", fmt_usd(floor), "Asymptotic $/M tokens at infinite batch"),
+        Stat::new("Knee batch", fmt_eng(knee_batch), "First batch within 10% of the floor"),
+        Stat::new("Cost at knee", fmt_usd(knee_cost), "$ / M tokens at that batch"),
+        Stat::new(
+            "Latency at knee",
+            format!("{} ms", fmt_f(knee_lat, 1)),
+            "Practical latency cost of the knee",
+        ),
     ]);
 
     let cost_pts: Vec<(f64, f64)> =
@@ -411,7 +418,7 @@ async fn context(Query(p): Query<ContextParams>) -> Html<String> {
     let bpp = p.bytes_per_param.unwrap_or(BYTES_PER_PARAM_FP8);
     let bpt = p.bytes_per_token.unwrap_or(BYTES_PER_TOKEN);
 
-    let ctx = Array1::logspace(10.0, 1.0, 6.0, 300);
+    let ctx = Array1::logspace(10.0, 1.0, 6.5, 300);
     let bs = Array1::from_elem(300, batch);
     let tc = t_compute(&bs, n_active, FLOPS);
     let tw = t_mem_weights(&bs, n_total, bpp, MEM_BW);
@@ -419,11 +426,14 @@ async fn context(Query(p): Query<ContextParams>) -> Html<String> {
     let tm = &tw + &tk;
     let total: Vec<f64> = (0..300).map(|i| tc[i].max(tm[i])).collect();
 
-    // Find crossover where compute = memory (ignoring weights since they're constant)
-    let cross_idx = (0..300)
-        .min_by(|&i, &j| (tc[i] - tm[i]).abs().partial_cmp(&(tc[j] - tm[j]).abs()).unwrap())
-        .unwrap();
-    let crossover = ctx[cross_idx];
+    // KV-vs-weights crossover: closed-form, the actual "memory wall" point.
+    // t_kv = batch * ctx * bpt / mem_bw equals t_weights = N_total * bpp / mem_bw
+    // when ctx = N_total * bpp / (batch * bpt). Independent of MEM_BW.
+    let kv_weight_crossover = if batch > 0.0 && bpt > 0.0 {
+        n_total * bpp / (batch * bpt)
+    } else {
+        f64::NAN
+    };
 
     let lat_at = |c: f64| -> f64 {
         let bb = Array1::from_elem(1, batch);
@@ -432,7 +442,11 @@ async fn context(Query(p): Query<ContextParams>) -> Html<String> {
         lt[0] * 1000.0
     };
     let stats = stats_grid(&[
-        Stat::new("Crossover context", fmt_eng(crossover), "compute time = memory time"),
+        Stat::new(
+            "KV = weights at",
+            format!("{} tok", fmt_eng(kv_weight_crossover)),
+            "KV-cache time catches weight-fetch time",
+        ),
         Stat::new("Latency @ 32k", format!("{} ms", fmt_f(lat_at(32_768.0), 1)), "At given batch"),
         Stat::new("Latency @ 1M", format!("{} ms", fmt_f(lat_at(1_000_000.0), 1)), "Memory-bandwidth wall"),
         Stat::new("Batch (fixed)", fmt_eng(batch), "Sequences per forward"),
@@ -442,7 +456,17 @@ async fn context(Query(p): Query<ContextParams>) -> Html<String> {
     let s_compute: Vec<(f64, f64)> = ctx.iter().zip(tc.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
     let s_kv: Vec<(f64, f64)> = ctx.iter().zip(tk.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
 
-    let cross_label = format!("crossover≈{}", fmt_eng(crossover));
+    let s_weights: Vec<(f64, f64)> = ctx.iter().zip(tw.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
+    let cross_label = format!("KV=weights @{}", fmt_eng(kv_weight_crossover));
+    let mut markers = vec![];
+    if kv_weight_crossover.is_finite() && kv_weight_crossover > 1.0 {
+        markers.push(Marker {
+            axis: Axis::X,
+            value: kv_weight_crossover,
+            label: &cross_label,
+            color: "#ec4899",
+        });
+    }
     let chart = LineChart {
         title: "Latency vs context length",
         x_label: "Context length (tokens)",
@@ -452,9 +476,10 @@ async fn context(Query(p): Query<ContextParams>) -> Html<String> {
         series: vec![
             Series { name: "Total",   color: "#00d4ff", points: s_total },
             Series { name: "Compute", color: "#22c55e", points: s_compute },
+            Series { name: "Weights", color: "#a855f7", points: s_weights },
             Series { name: "KV",      color: "#f59e0b", points: s_kv },
         ],
-        markers: vec![Marker { axis: Axis::X, value: crossover, label: &cross_label, color: "#ec4899" }],
+        markers,
     }
     .render();
 
@@ -462,15 +487,15 @@ async fn context(Query(p): Query<ContextParams>) -> Html<String> {
     for c in [1024.0, 8192.0, 32768.0, 131072.0, 1_000_000.0] {
         let bb = Array1::from_elem(1, batch);
         let cc = Array1::from_elem(1, c);
-        let (tt, _, _, kk) = total_latency(&bb, n_active, n_total, &cc, bpp, bpt, FLOPS, MEM_BW);
+        let (tt, _, ww, kk) = total_latency(&bb, n_active, n_total, &cc, bpp, bpt, FLOPS, MEM_BW);
         rows.push(vec![
             fmt_eng(c),
             format!("{} ms", fmt_f(tt[0] * 1000.0, 2)),
             format!("{} ms", fmt_f(kk[0] * 1000.0, 2)),
-            format!("{:.1}×", kk[0] / tc[0].max(1e-12)),
+            format!("{:.2}×", kk[0] / ww[0].max(1e-12)),
         ]);
     }
-    let tbl = table(&["Context", "Total latency", "KV time", "KV / compute"], &rows);
+    let tbl = table(&["Context", "Total latency", "KV time", "KV / weights"], &rows);
 
     let form_html = form(
         "/context",
@@ -705,12 +730,12 @@ struct ScalingParams {
     months: Option<f64>,
     alpha_rl: Option<f64>,
     cost_per_flop: Option<f64>,
+    ratio: Option<f64>,
 }
 
 async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
     use physics::scaling::{
-        inference_tokens_served, optimal_pretrain_ratio, over_training_factor, total_cost,
-        FlopsPerToken,
+        inference_tokens_served, over_training_factor, total_cost, FlopsPerToken,
     };
 
     let n_active = p.n_active.unwrap_or(100e9);
@@ -718,19 +743,27 @@ async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
     let months = p.months.unwrap_or(2.0);
     let alpha = p.alpha_rl.unwrap_or(0.5);
     let cpf = p.cost_per_flop.unwrap_or(1e-15);
+    // User picks the pretrain:inference ratio. There is no single "optimal" —
+    // every additional pretraining token strictly adds cost given fixed
+    // inference demand. The page explores the tradeoff. Default 1.0 lands
+    // in the "frontier-style ~100× over Chinchilla" regime at typical inputs.
+    let ratio = p.ratio.unwrap_or(1.0);
 
     let d_inf = inference_tokens_served(tps, months);
-    let ratios = Array1::logspace(10.0, -2.0, 3.0, 400);
     let fpt = FlopsPerToken::default();
 
-    let (best_idx, best_ratio) =
-        optimal_pretrain_ratio(d_inf, n_active, &fpt, cpf, alpha, &ratios);
-    let pretrain_tokens = best_ratio * d_inf;
+    let pretrain_tokens = ratio * d_inf;
     let over = over_training_factor(pretrain_tokens, n_active);
+    let chinchilla_tokens = 20.0 * n_active;
 
-    let mut series_total = Vec::new();
-    let mut series_pt = Vec::new();
-    let mut series_inf = Vec::new();
+    let (total, c_pt, c_rl, c_inf) =
+        total_cost(pretrain_tokens, pretrain_tokens, d_inf, n_active, &fpt, cpf, alpha);
+
+    // Sweep the ratio space for the chart so users can see the shape.
+    let ratios = Array1::logspace(10.0, -2.0, 3.0, 200);
+    let mut series_total = Vec::with_capacity(ratios.len());
+    let mut series_pt = Vec::with_capacity(ratios.len());
+    let mut series_inf = Vec::with_capacity(ratios.len());
     for &r in ratios.iter() {
         let d_pt = r * d_inf;
         let (t, pt, _, inf) = total_cost(d_pt, d_pt, d_inf, n_active, &fpt, cpf, alpha);
@@ -739,19 +772,40 @@ async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
         series_inf.push((r, inf));
     }
 
-    let (best_total, best_pt, best_rl, best_inf) = total_cost(
-        best_ratio * d_inf, best_ratio * d_inf, d_inf, n_active, &fpt, cpf, alpha,
-    );
+    let regime = if over < 1.0 {
+        "under-trained vs Chinchilla"
+    } else if over < 5.0 {
+        "near-Chinchilla"
+    } else if over < 50.0 {
+        "moderate over-training"
+    } else if over < 500.0 {
+        "frontier-style over-training (~100×)"
+    } else {
+        "extreme over-training"
+    };
 
     let stats = stats_grid(&[
-        Stat::new("Inference tokens", fmt_eng(d_inf), format!("{:.0}M tok/s × {:.1} mo", tps / 1e6, months)),
-        Stat::new("Optimal ratio", fmt_f(best_ratio, 3), "pretrain : inference tokens"),
-        Stat::new("Over-training factor", format!("{:.1}×", over), "vs Chinchilla (20×N)"),
-        Stat::new("Total cost", fmt_usd(best_total), "at optimal ratio"),
+        Stat::new(
+            "Pretrain tokens",
+            fmt_eng(pretrain_tokens),
+            format!("Chinchilla optimum is {} (20×N)", fmt_eng(chinchilla_tokens)),
+        ),
+        Stat::new(
+            "Over-training",
+            format!("{:.1}×", over),
+            regime,
+        ),
+        Stat::new(
+            "Inference tokens served",
+            fmt_eng(d_inf),
+            format!("{:.0}M tok/s × {:.1} months", tps / 1e6, months),
+        ),
+        Stat::new("Total cost", fmt_usd(total), "Pretrain + RL + inference"),
     ]);
 
+    let mark_label = format!("you @ {}×", fmt_f(ratio, 1));
     let chart = LineChart {
-        title: "Total cost vs pretrain:inference ratio",
+        title: "Cost vs pretrain : inference ratio",
         x_label: "Ratio (D_pretrain / D_inference)",
         y_label: "$ cost",
         x_scale: Scale::Log10,
@@ -761,23 +815,17 @@ async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
             Series { name: "Pretrain",  color: "#a855f7", points: series_pt },
             Series { name: "Inference", color: "#22c55e", points: series_inf },
         ],
-        markers: vec![Marker {
-            axis: Axis::X,
-            value: best_ratio,
-            label: "optimum",
-            color: "#ec4899",
-        }],
+        markers: vec![Marker { axis: Axis::X, value: ratio, label: &mark_label, color: "#ec4899" }],
     }
     .render();
 
     let rows = vec![
-        vec!["Pretrain".into(), fmt_usd(best_pt), format!("{:.1}%", best_pt / best_total * 100.0)],
-        vec!["RL".into(),       fmt_usd(best_rl), format!("{:.1}%", best_rl / best_total * 100.0)],
-        vec!["Inference".into(),fmt_usd(best_inf),format!("{:.1}%", best_inf / best_total * 100.0)],
-        vec!["Total".into(),    fmt_usd(best_total), "100.0%".into()],
+        vec!["Pretrain".into(),  fmt_usd(c_pt),  format!("{:.1}%", c_pt  / total * 100.0)],
+        vec!["RL".into(),        fmt_usd(c_rl),  format!("{:.1}%", c_rl  / total * 100.0)],
+        vec!["Inference".into(), fmt_usd(c_inf), format!("{:.1}%", c_inf / total * 100.0)],
+        vec!["Total".into(),     fmt_usd(total), "100.0%".into()],
     ];
     let tbl = table(&["Stage", "Cost", "Share"], &rows);
-    let _ = best_idx;
 
     let form_html = form(
         "/scaling",
@@ -788,6 +836,8 @@ async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
                 kind: FieldKind::Number { step: "1e6", min: Some("1") } },
             Field { name: "months", label: "Months running", hint: "Default 2", value: fmt_f(months, 1),
                 kind: FieldKind::Number { step: "0.5", min: Some("0.1") } },
+            Field { name: "ratio", label: "Pretrain:inference ratio", hint: "How many tokens per inference token (1–1000)", value: fmt_f(ratio, 2),
+                kind: FieldKind::Number { step: "5", min: Some("0.01") } },
             Field { name: "alpha_rl", label: "RL inefficiency α", hint: "Default 0.5", value: fmt_f(alpha, 2),
                 kind: FieldKind::Number { step: "0.1", min: Some("0") } },
             Field { name: "cost_per_flop", label: "Cost per FLOP", hint: "Default 1e-15", value: fmt_num(cpf),
@@ -797,12 +847,12 @@ async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
 
     let body = format!(
         r#"<h1>Scaling laws & over-training</h1>
-<p class="subtitle">Frontier models over-train ~100× vs Chinchilla. Inference demand makes pretraining cheap to amortize.</p>
+<p class="subtitle">There is no single optimum for fixed inference demand — every extra pretrain token adds cost. Pick a ratio and see what regime it puts you in. Frontier labs sit around 100× over Chinchilla because the resulting model is reused over many inference calls.</p>
 {f}{s}{c}{t}"#,
         f = section("Parameters", &form_html),
         s = stats,
-        c = section("Cost vs ratio", &format!(r#"<div class="chart">{}</div>"#, chart)),
-        t = section("Cost breakdown at optimum", &tbl),
+        c = section("Cost decomposition", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        t = section("Cost breakdown at chosen ratio", &tbl),
     );
     Html(page("Scaling", "/scaling", &body))
 }
