@@ -1,6 +1,6 @@
 //! Training Modern AI — CLI entry point.
 //!
-//! Runs all 14 experiments and serves the interactive web UI.
+//! Runs the 14 experiments and exposes subcommands for individual modules.
 
 use clap::{Parser, Subcommand};
 
