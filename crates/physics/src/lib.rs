@@ -30,8 +30,8 @@ pub mod types;
 
 // Re-export commonly used items
 pub use constants::{
-    BYTES_PER_PARAM_FP4, BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, CONTEXT_LENGTH,
-    FLOPS, GPU_COST_PER_HOUR, GPUS_IN_RACK, MEM_BW, N_ACTIVE, N_TOTAL,
+    BYTES_PER_PARAM_FP4, BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, CONTEXT_LENGTH, FLOPS, GPUS_IN_RACK,
+    GPU_COST_PER_HOUR, MEM_BW, N_ACTIVE, N_TOTAL,
 };
 pub use cost::{cost_per_million_tokens, rack_cost_per_sec};
 pub use latency::{t_compute, t_mem_kv, t_mem_weights, total_latency};

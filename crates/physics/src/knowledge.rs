@@ -55,11 +55,7 @@ pub struct EntropyStats {
     pub reduction_vs_no_gc: f64,
 }
 
-pub fn entropy_stats(
-    entropy: &[f64],
-    no_gc_entropy: &[f64],
-    total_prs: usize,
-) -> EntropyStats {
+pub fn entropy_stats(entropy: &[f64], no_gc_entropy: &[f64], total_prs: usize) -> EntropyStats {
     let final_val = *entropy.last().unwrap_or(&0.0);
     let peak = entropy.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let per_pr = final_val / total_prs.max(1) as f64;
@@ -103,11 +99,7 @@ pub fn agents_md_passive_effectiveness(
 }
 
 /// AGENTS.md active (skills-based) effectiveness.
-pub fn agents_md_active_effectiveness(
-    size_kb: f64,
-    optimal_kb: f64,
-    sigma: f64,
-) -> f64 {
+pub fn agents_md_active_effectiveness(size_kb: f64, optimal_kb: f64, sigma: f64) -> f64 {
     if size_kb <= 0.0 {
         return 40.0;
     }
@@ -137,8 +129,10 @@ mod tests {
         let ent_weekly = simulate_entropy(30, 20, 0.03, 0.001, 7, 0.6);
 
         // Weekly GC should have lower final entropy
-        assert!(ent_weekly.last().unwrap() < ent_no_gc.last().unwrap(),
-            "GC should reduce entropy");
+        assert!(
+            ent_weekly.last().unwrap() < ent_no_gc.last().unwrap(),
+            "GC should reduce entropy"
+        );
     }
 
     #[test]
@@ -152,8 +146,10 @@ mod tests {
 
         let continuous = strategies[3].0.last().unwrap();
         for (ent, name) in &strategies[..3] {
-            assert!(continuous < ent.last().unwrap(),
-                "continuous should beat {name}");
+            assert!(
+                continuous < ent.last().unwrap(),
+                "continuous should beat {name}"
+            );
         }
     }
 
@@ -182,6 +178,9 @@ mod tests {
         let huge = agents_md_passive_effectiveness(500.0, 8.0, 1.2, 128000.0, 150.0, 5000.0);
 
         // 500 KB should be severely polluted
-        assert!(huge < small * 0.5, "500 KB should have heavy pollution penalty");
+        assert!(
+            huge < small * 0.5,
+            "500 KB should have heavy pollution penalty"
+        );
     }
 }

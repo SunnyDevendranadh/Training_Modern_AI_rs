@@ -1,8 +1,9 @@
 //! HTML page chrome: layout, navigation, form helpers.
 //!
-//! Every page is rendered server-side as a complete HTML document. No
-//! client JavaScript is required — forms submit via GET and the server
-//! returns a fully rendered page with computed results.
+//! Pages are server-rendered HTML. HTMX is loaded so that form changes
+//! trigger partial re-renders of just the results section, without a full
+//! page reload — but the app degrades gracefully to plain GET form submits
+//! if JavaScript is disabled.
 
 use std::fmt::Write;
 
@@ -18,7 +19,11 @@ pub const NAV: &[(&str, &str, &str)] = &[
     ("/pricing", "Pricing", "OpenAI vs Anthropic"),
     ("/agents-md", "AGENTS.md", "Passive context sweet spot"),
     ("/coordination", "Coordination", "Multi-agent strategies"),
-    ("/throughput", "Throughput", "Blocking vs minimally-blocking"),
+    (
+        "/throughput",
+        "Throughput",
+        "Blocking vs minimally-blocking",
+    ),
 ];
 
 pub fn page(title: &str, current_path: &str, body: &str) -> String {
@@ -30,6 +35,15 @@ pub fn page(title: &str, current_path: &str, body: &str) -> String {
         t = html_escape(title)
     );
     s.push_str(STYLE);
+    // Tiny vanilla-JS enhancement layer (~40 lines, audit it inline).
+    // It hooks `change` and debounced `input` events on the parameter form,
+    // fetches the same URL with an `HX-Request: true` header, swaps the
+    // result fragment into `#results`, and updates the URL — all without
+    // a full page reload.
+    //
+    // No external dependencies. If JS is disabled or this script fails,
+    // every form still works via plain method="get" submit.
+    s.push_str(LIVE_UPDATE_SCRIPT);
     s.push_str("</head><body>");
 
     // Header
@@ -48,7 +62,9 @@ pub fn page(title: &str, current_path: &str, body: &str) -> String {
     // Body
     let _ = write!(s, r#"<main class="container">{}</main>"#, body);
 
-    s.push_str(r#"<footer class="ftr">85 tests · 14 experiments · pure Rust · server-rendered</footer>"#);
+    s.push_str(
+        r#"<footer class="ftr">85 tests · 14 experiments · pure Rust · server-rendered</footer>"#,
+    );
     s.push_str("</body></html>");
     s
 }
@@ -61,8 +77,16 @@ pub struct Stat {
 }
 
 impl Stat {
-    pub fn new(label: impl Into<String>, value: impl Into<String>, hint: impl Into<String>) -> Self {
-        Self { label: label.into(), value: value.into(), hint: hint.into() }
+    pub fn new(
+        label: impl Into<String>,
+        value: impl Into<String>,
+        hint: impl Into<String>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            value: value.into(),
+            hint: hint.into(),
+        }
     }
 }
 
@@ -90,17 +114,16 @@ pub struct Field<'a> {
 }
 
 pub enum FieldKind<'a> {
-    Number {
-        step: &'a str,
-        min: Option<&'a str>,
-    },
-    Select {
-        options: &'a [(&'a str, &'a str)],
-    },
+    Number { step: &'a str, min: Option<&'a str> },
+    Select { options: &'a [(&'a str, &'a str)] },
 }
 
 pub fn form(action: &str, fields: &[Field]) -> String {
     let mut s = String::new();
+    // HTMX attrs: live-update #results on input/change with a small debounce.
+    // Plain method=get/action=… fallback still works without JS.
+    // method=get/action= keeps the no-JS fallback working. The custom JS
+    // attaches itself to forms with class="params" and intercepts changes.
     let _ = write!(
         s,
         r#"<form class="params" method="get" action="{a}"><div class="params-grid">"#,
@@ -114,9 +137,7 @@ pub fn form(action: &str, fields: &[Field]) -> String {
         );
         match &f.kind {
             FieldKind::Number { step, min } => {
-                let min_attr = min
-                    .map(|m| format!(r#" min="{}""#, m))
-                    .unwrap_or_default();
+                let min_attr = min.map(|m| format!(r#" min="{}""#, m)).unwrap_or_default();
                 let _ = write!(
                     s,
                     r#"<input type="number" inputmode="decimal" name="{n}" value="{v}" step="{step}"{min_attr}>"#,
@@ -174,12 +195,46 @@ pub fn section(title: &str, body: &str) -> String {
     )
 }
 
+/// Decide between full-page render and HTMX fragment based on the request.
+///
+/// HTMX sends `HX-Request: true` on partial updates; in that case we return
+/// just the results HTML and HTMX swaps it into `#results`. Otherwise we
+/// render the full page (form on top, then `#results` div with the same
+/// content). Both paths produce identical visible output — the difference is
+/// only whether the form/header gets re-rendered.
+pub fn respond(
+    is_htmx: bool,
+    title: &str,
+    path: &str,
+    intro_html: &str,
+    form_html: &str,
+    results_html: &str,
+) -> String {
+    if is_htmx {
+        return results_html.to_string();
+    }
+    let body = format!(
+        r#"{intro}{form}<div id="hx-indicator" class="hx-indicator">computing…</div><div id="results">{results}</div>"#,
+        intro = intro_html,
+        form = form_html,
+        results = results_html,
+    );
+    page(title, path, &body)
+}
+
 pub fn fmt_f(v: f64, decimals: usize) -> String {
     if v.is_nan() {
         return "—".into();
     }
     if v.is_infinite() {
         return "∞".into();
+    }
+    // Promote precision when the value is small enough that the requested
+    // precision would round to zero (e.g. 0.022 with decimals=1 should show
+    // as 0.02, not 0.0).
+    if v != 0.0 && v.abs() < 10f64.powi(-(decimals as i32)) {
+        let extra = (-(v.abs().log10().floor() as i32)).max(decimals as i32 + 1) as usize;
+        return format!("{:.*}", extra.min(6), v);
     }
     format!("{:.*}", decimals, v)
 }
@@ -196,7 +251,7 @@ pub fn fmt_num(v: f64) -> String {
     if v.fract() == 0.0 && a < 1e6 {
         return format!("{}", v as i64);
     }
-    if a >= 1e5 || a < 1e-3 {
+    if !(1e-3..1e5).contains(&a) {
         // Compact scientific: trim trailing zeros from mantissa
         let s = format!("{:e}", v);
         return s;
@@ -228,14 +283,80 @@ pub fn fmt_eng(v: f64) -> String {
 }
 
 pub fn fmt_usd(v: f64) -> String {
-    if v >= 1.0 {
+    let a = v.abs();
+    if a >= 1e12 {
+        format!("${:.2}T", v / 1e12)
+    } else if a >= 1e9 {
+        format!("${:.2}B", v / 1e9)
+    } else if a >= 1e6 {
+        format!("${:.2}M", v / 1e6)
+    } else if a >= 1e3 {
+        format!("${:.2}k", v / 1e3)
+    } else if a >= 1.0 {
         format!("${:.2}", v)
-    } else if v >= 1e-2 {
+    } else if a >= 1e-2 {
         format!("${:.4}", v)
     } else {
         format!("${:.6}", v)
     }
 }
+
+/// Tiny vanilla-JS enhancement: debounced live form updates.
+///
+/// Hooks the parameter form on each page. On `change` (immediate) or
+/// debounced `input`, refetches the page URL with form data and
+/// `HX-Request: true` header. The server responds with just the
+/// `#results` fragment, which we swap in place. URL is updated via
+/// `history.replaceState` so the back button still works.
+///
+/// Approximately 35 lines of code. No external dependencies. If this
+/// script fails or JS is disabled, the form falls back to the standard
+/// `<form method="get">` submit (full-page reload).
+const LIVE_UPDATE_SCRIPT: &str = r#"<script>
+(function () {
+  'use strict';
+  var DEBOUNCE_MS = 400;
+  document.addEventListener('DOMContentLoaded', function () {
+    var form = document.querySelector('form.params');
+    var target = document.getElementById('results');
+    var indicator = document.getElementById('hx-indicator');
+    if (!form || !target) return;
+    var timer = null;
+    function update() {
+      var params = new URLSearchParams(new FormData(form));
+      var url = form.getAttribute('action') + '?' + params.toString();
+      if (indicator) indicator.style.display = 'inline-block';
+      target.style.opacity = '0.5';
+      fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        })
+        .then(function (html) {
+          target.innerHTML = html;
+          if (history && history.replaceState) {
+            history.replaceState(null, '', url);
+          }
+        })
+        .catch(function (err) { console.error('Live update failed:', err); })
+        .then(function () {
+          if (indicator) indicator.style.display = 'none';
+          target.style.opacity = '1';
+        });
+    }
+    form.addEventListener('change', function () { clearTimeout(timer); update(); });
+    form.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(update, DEBOUNCE_MS);
+    });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(timer);
+      update();
+    });
+  });
+})();
+</script>"#;
 
 const STYLE: &str = r#"<style>
 :root {
@@ -399,4 +520,20 @@ table.data tr:hover td { background: var(--panel-2); }
 .tile p { margin: 0.4rem 0 0; color: var(--muted); font-size: 13px; }
 
 .ftr { text-align: center; color: var(--muted); padding: 1.5rem; font-size: 12px; }
+
+.hx-indicator {
+  display: none;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--cyan);
+  padding: 0.4rem 0.8rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 0 0 0.75rem;
+  width: fit-content;
+}
+#hx-indicator.htmx-request { display: inline-block; }
+#results.htmx-swapping { opacity: 0.5; transition: opacity 100ms ease-out; }
+#results { transition: opacity 200ms ease-in; }
 </style>"#;

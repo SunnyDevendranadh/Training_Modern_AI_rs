@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a new page, physics module, or improvement.
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - New web page
+        - New physics module
+        - Improvement to existing page or module
+        - CLI / developer experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: >
+        What question does this help someone answer?
+        For new physics modules, cite the paper or source.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: >
+        What should the page/module look like?
+        For physics: list the inputs, outputs, and the core formula.
+        For UX: describe or sketch the interaction.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: willing-to-pr
+    attributes:
+      label: Willing to submit a PR?
+      options:
+        - label: Yes, I can implement this.
+        - label: I can help review if someone else implements it.

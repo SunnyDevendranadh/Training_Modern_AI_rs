@@ -42,11 +42,7 @@ pub fn anthropic_total_cost(
 /// Find the break-even point where the two pricing models cross.
 ///
 /// Returns the session-hours where Anthropic total ≈ OpenAI total.
-pub fn find_break_even(
-    hours: &[f64],
-    oa_costs: &[f64],
-    anthro_costs: &[f64],
-) -> Option<f64> {
+pub fn find_break_even(hours: &[f64], oa_costs: &[f64], anthro_costs: &[f64]) -> Option<f64> {
     for i in 1..hours.len() {
         let oa_prev = oa_costs[i - 1];
         let anth_prev = anthro_costs[i - 1];
@@ -86,8 +82,14 @@ mod tests {
         assert!(anth_lo < oa_lo, "Anthropic should be cheaper at low usage");
 
         // At high usage, Anthropic is still cheaper because sandbox compute is expensive
-        let oa_hi = openai_total_cost(10_000.0, SANDBOX_PER_HOUR, TOKENS_PER_HOUR, MODEL_COST_PER_M);
-        let anth_hi = anthropic_total_cost(10_000.0, ANTHROPIC_PER_HOUR, 40_000.0, MODEL_COST_PER_M);
+        let oa_hi = openai_total_cost(
+            10_000.0,
+            SANDBOX_PER_HOUR,
+            TOKENS_PER_HOUR,
+            MODEL_COST_PER_M,
+        );
+        let anth_hi =
+            anthropic_total_cost(10_000.0, ANTHROPIC_PER_HOUR, 40_000.0, MODEL_COST_PER_M);
         // The key insight: harness fee differences shrink at high volume,
         // both dominated by model cost
         let oa_ratio = oa_hi / oa_lo;
@@ -112,15 +114,22 @@ mod tests {
         let gap_hi = oa_hi / anth_hi;
 
         // Gaps narrow as model cost dominates infrastructure cost
-        assert!(gap_hi < gap_lo,
-            "expensive model should narrow the infrastructure gap: lo={gap_lo}, hi={gap_hi}");
+        assert!(
+            gap_hi < gap_lo,
+            "expensive model should narrow the infrastructure gap: lo={gap_lo}, hi={gap_hi}"
+        );
     }
 
     #[test]
     fn model_cost_dominates_at_scale_with_expensive_model() {
         // With expensive model ($10/M tokens), model cost dominates at scale
         let expensive_model = 10.0; // $10/M tokens
-        let oa = openai_total_cost(100_000.0, SANDBOX_PER_HOUR, TOKENS_PER_HOUR, expensive_model);
+        let oa = openai_total_cost(
+            100_000.0,
+            SANDBOX_PER_HOUR,
+            TOKENS_PER_HOUR,
+            expensive_model,
+        );
         let oa_sandbox_only = openai_cost(100_000.0, SANDBOX_PER_HOUR);
         // Model cost: 100k hrs * 50k tok/hr = 5B tok = 5000 * $10 = $50K model
         // Sandbox: 100k * $0.50 = $50K

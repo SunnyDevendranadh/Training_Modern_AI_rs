@@ -43,9 +43,8 @@ pub fn net_fast_throughput(
     error_rate: f64,
     auto_fix_success: f64,
 ) -> f64 {
-    let (merged, _, remaining) = throughput_minimally_blocking(
-        prs_per_day, test_pass_rate, error_rate, auto_fix_success,
-    );
+    let (merged, _, remaining) =
+        throughput_minimally_blocking(prs_per_day, test_pass_rate, error_rate, auto_fix_success);
     merged - remaining
 }
 
@@ -58,7 +57,8 @@ pub fn throughput_speedup(
     test_pass_rate: f64,
     auto_fix_success: f64,
 ) -> f64 {
-    let (traditional, _) = throughput_blocking(prs_per_day, review_hours_per_pr, num_reviewers, error_rate);
+    let (traditional, _) =
+        throughput_blocking(prs_per_day, review_hours_per_pr, num_reviewers, error_rate);
     let fast = net_fast_throughput(prs_per_day, test_pass_rate, error_rate, auto_fix_success);
     fast / traditional.max(0.01)
 }
@@ -101,7 +101,8 @@ mod tests {
 
     #[test]
     fn zero_error_rate_means_no_remaining_errors() {
-        let (_merged, auto_fixed, remaining) = throughput_minimally_blocking(100.0, 0.95, 0.0, 0.80);
+        let (_merged, auto_fixed, remaining) =
+            throughput_minimally_blocking(100.0, 0.95, 0.0, 0.80);
         assert_relative_eq!(remaining, 0.0);
         assert_relative_eq!(auto_fixed, 0.0);
     }

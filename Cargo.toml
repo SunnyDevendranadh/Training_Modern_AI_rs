@@ -6,7 +6,12 @@ members = ["crates/physics", "crates/experiments", "crates/web", "crates/cli"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/SunnyDevendranadh/Training_Modern_AI"
+repository = "https://github.com/SunnyDevendranadh/Training_Modern_AI_rs"
+homepage = "https://github.com/SunnyDevendranadh/Training_Modern_AI_rs"
+readme = "README.md"
+keywords = ["transformer", "inference", "roofline", "scaling-laws", "education"]
+categories = ["science", "simulation", "command-line-utilities"]
+rust-version = "1.75"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
