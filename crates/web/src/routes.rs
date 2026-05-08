@@ -4,16 +4,20 @@
 //! are shareable. The client receives a complete HTML document with embedded
 //! SVG charts; no JavaScript required.
 
-use axum::{extract::Query, response::Html, routing::get, Json, Router};
+use axum::{extract::Query, http::HeaderMap, response::Html, routing::get, Json, Router};
 use ndarray::Array1;
 use physics::*;
 use serde::Deserialize;
 
 use crate::chart::{Axis, BarChart, LineChart, Marker, Scale, Series};
 use crate::render::{
-    fmt_eng, fmt_f, fmt_num, fmt_usd, form, page, section, stats_grid, table, Field, FieldKind,
-    Stat,
+    fmt_eng, fmt_f, fmt_num, fmt_usd, form, page, respond, section, stats_grid, table, Field,
+    FieldKind, Stat,
 };
+
+fn is_htmx(headers: &HeaderMap) -> bool {
+    headers.get("hx-request").is_some()
+}
 
 pub fn create_router() -> Router {
     Router::new()
@@ -91,7 +95,7 @@ struct RooflineParams {
     bytes_per_token: Option<f64>,
 }
 
-async fn roofline(Query(p): Query<RooflineParams>) -> Html<String> {
+async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<String> {
     let n_active = p.n_active.unwrap_or(N_ACTIVE);
     let n_total = p.n_total.unwrap_or(N_TOTAL);
     let ctx_len = p.context.unwrap_or(CONTEXT_LENGTH);
@@ -225,20 +229,17 @@ async fn roofline(Query(p): Query<RooflineParams>) -> Html<String> {
         ],
     );
 
-    let body = format!(
-        r#"<h1>Roofline analysis</h1>
-<p class="subtitle">Total latency = max(compute, weights + KV cache). Below the balance batch you are memory-bound; above it you are compute-bound.</p>
-{form}
-{stats}
-{chart_section}
-{table_section}"#,
-        form = section("Parameters", &form_html),
+    let intro = r#"<h1>Roofline analysis</h1>
+<p class="subtitle">Total latency = max(compute, weights + KV cache). Below the balance batch you are memory-bound; above it you are compute-bound.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{stats}{chart_section}{table_section}",
         stats = stats,
         chart_section = section("Latency decomposition", &format!(r#"<div class="chart">{}</div>"#, chart)),
         table_section = section("Sample batch sizes", &tbl),
     );
 
-    Html(page("Roofline", "/roofline", &body))
+    Html(respond(is_htmx(&headers), "Roofline", "/roofline", intro, &form_section, &results))
 }
 
 // =====================================================================
@@ -255,7 +256,7 @@ struct CostParams {
     gpus_in_rack: Option<usize>,
 }
 
-async fn cost(Query(p): Query<CostParams>) -> Html<String> {
+async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
     let n_active = p.n_active.unwrap_or(N_ACTIVE);
     let n_total = p.n_total.unwrap_or(N_TOTAL);
     let ctx_len = p.context.unwrap_or(CONTEXT_LENGTH);
@@ -385,17 +386,17 @@ async fn cost(Query(p): Query<CostParams>) -> Html<String> {
         ],
     );
 
-    let body = format!(
-        r#"<h1>Cost per million tokens</h1>
-<p class="subtitle">Bigger batches amortize the rack’s fixed cost over more tokens. Cost approaches a compute floor — never zero.</p>
-{f}{s}{c}{t}"#,
-        f = section("Parameters", &form_html),
+    let intro = r#"<h1>Cost per million tokens</h1>
+<p class="subtitle">Bigger batches amortize the rack’s fixed cost over more tokens. Cost approaches a compute floor — never zero.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{s}{c}{t}",
         s = stats,
         c = section("Cost curve", &format!(r#"<div class="chart">{}</div>"#, chart)),
         t = section("Sample batch sizes", &tbl),
     );
 
-    Html(page("Cost", "/cost", &body))
+    Html(respond(is_htmx(&headers), "Cost", "/cost", intro, &form_section, &results))
 }
 
 // =====================================================================
@@ -411,7 +412,7 @@ struct ContextParams {
     bytes_per_token: Option<f64>,
 }
 
-async fn context(Query(p): Query<ContextParams>) -> Html<String> {
+async fn context(headers: HeaderMap, Query(p): Query<ContextParams>) -> Html<String> {
     let batch = p.batch.unwrap_or(2000.0);
     let n_active = p.n_active.unwrap_or(N_ACTIVE);
     let n_total = p.n_total.unwrap_or(N_TOTAL);
@@ -515,17 +516,17 @@ async fn context(Query(p): Query<ContextParams>) -> Html<String> {
         ],
     );
 
-    let body = format!(
-        r#"<h1>Context length: bandwidth wall</h1>
-<p class="subtitle">At long context, KV cache reads dominate compute — the wall is memory bandwidth, not FLOPs.</p>
-{f}{s}{c}{t}"#,
-        f = section("Parameters", &form_html),
+    let intro = r#"<h1>Context length: bandwidth wall</h1>
+<p class="subtitle">At long context, KV cache reads dominate compute — the wall is memory bandwidth, not FLOPs.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{s}{c}{t}",
         s = stats,
         c = section("Latency vs context", &format!(r#"<div class="chart">{}</div>"#, chart)),
         t = section("Sample contexts", &tbl),
     );
 
-    Html(page("Context", "/context", &body))
+    Html(respond(is_htmx(&headers), "Context", "/context", intro, &form_section, &results))
 }
 
 // =====================================================================
@@ -541,7 +542,7 @@ struct AgentsMdParams {
     task_complexity: Option<f64>,
 }
 
-async fn agents_md(Query(p): Query<AgentsMdParams>) -> Html<String> {
+async fn agents_md(headers: HeaderMap, Query(p): Query<AgentsMdParams>) -> Html<String> {
     let optimal = p.optimal_kb.unwrap_or(8.0);
     let sigma = p.sigma.unwrap_or(1.2);
     let ctx_window = p.context_window.unwrap_or(128_000.0);
@@ -617,17 +618,17 @@ async fn agents_md(Query(p): Query<AgentsMdParams>) -> Html<String> {
         ],
     );
 
-    let body = format!(
-        r#"<h1>AGENTS.md effectiveness</h1>
-<p class="subtitle">Passive context (auto-injected) hits 100% near the sweet spot but pollutes the window when large. Active retrieval caps at ~79% but degrades gracefully.</p>
-{f}{s}{c}{t}"#,
-        f = section("Parameters", &form_html),
+    let intro = r#"<h1>AGENTS.md effectiveness</h1>
+<p class="subtitle">Passive context (auto-injected) hits 100% near the sweet spot but pollutes the window when large. Active retrieval caps at ~79% but degrades gracefully.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{s}{c}{t}",
         s = stats,
         c = section("Effectiveness curve", &format!(r#"<div class="chart">{}</div>"#, chart)),
         t = section("Sample sizes", &tbl),
     );
 
-    Html(page("AGENTS.md", "/agents-md", &body))
+    Html(respond(is_htmx(&headers), "AGENTS.md", "/agents-md", intro, &form_section, &results))
 }
 
 // =====================================================================
@@ -639,7 +640,7 @@ struct CoordParams {
     max_agents: Option<usize>,
 }
 
-async fn coordination(Query(p): Query<CoordParams>) -> Html<String> {
+async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<String> {
     use physics::agents::effective_throughput;
     use physics::types::CoordinationStrategy;
 
@@ -706,17 +707,17 @@ async fn coordination(Query(p): Query<CoordParams>) -> Html<String> {
         }],
     );
 
-    let body = format!(
-        r#"<h1>Multi-agent coordination</h1>
-<p class="subtitle">Cursor's four iterations. Only Recursive Planner+Worker scales near-linearly — the others all collapse or saturate.</p>
-{f}{s}{c}{t}"#,
-        f = section("Parameters", &form_html),
+    let intro = r#"<h1>Multi-agent coordination</h1>
+<p class="subtitle">Cursor's four iterations. Only Recursive Planner+Worker scales near-linearly — the others all collapse or saturate.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{s}{c}{t}",
         s = stats,
         c = section("Coordination strategies", &format!(r#"<div class="chart">{}</div>"#, chart)),
         t = section("Sample sizes", &tbl),
     );
 
-    Html(page("Coordination", "/coordination", &body))
+    Html(respond(is_htmx(&headers), "Coordination", "/coordination", intro, &form_section, &results))
 }
 
 // =====================================================================
@@ -733,7 +734,7 @@ struct ScalingParams {
     ratio: Option<f64>,
 }
 
-async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
+async fn scaling(headers: HeaderMap, Query(p): Query<ScalingParams>) -> Html<String> {
     use physics::scaling::{
         inference_tokens_served, over_training_factor, total_cost, FlopsPerToken,
     };
@@ -845,16 +846,16 @@ async fn scaling(Query(p): Query<ScalingParams>) -> Html<String> {
         ],
     );
 
-    let body = format!(
-        r#"<h1>Scaling laws & over-training</h1>
-<p class="subtitle">There is no single optimum for fixed inference demand — every extra pretrain token adds cost. Pick a ratio and see what regime it puts you in. Frontier labs sit around 100× over Chinchilla because the resulting model is reused over many inference calls.</p>
-{f}{s}{c}{t}"#,
-        f = section("Parameters", &form_html),
+    let intro = r#"<h1>Scaling laws & over-training</h1>
+<p class="subtitle">There is no single optimum for fixed inference demand — every extra pretrain token adds cost. Pick a ratio and see what regime it puts you in. Frontier labs sit around 100× over Chinchilla because the resulting model is reused over many inference calls.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{s}{c}{t}",
         s = stats,
         c = section("Cost decomposition", &format!(r#"<div class="chart">{}</div>"#, chart)),
         t = section("Cost breakdown at chosen ratio", &tbl),
     );
-    Html(page("Scaling", "/scaling", &body))
+    Html(respond(is_htmx(&headers), "Scaling", "/scaling", intro, &form_section, &results))
 }
 
 // =====================================================================
@@ -870,7 +871,7 @@ struct PricingParams {
     max_hours: Option<f64>,
 }
 
-async fn pricing(Query(p): Query<PricingParams>) -> Html<String> {
+async fn pricing(headers: HeaderMap, Query(p): Query<PricingParams>) -> Html<String> {
     use physics::pricing::{anthropic_total_cost, find_break_even, openai_total_cost};
 
     let oa_h = p.sandbox_per_hour.unwrap_or(0.50);
@@ -939,17 +940,17 @@ async fn pricing(Query(p): Query<PricingParams>) -> Html<String> {
         ],
     );
 
-    let body = format!(
-        r#"<h1>Harness pricing: OpenAI vs Anthropic</h1>
-<p class="subtitle">At low usage, sandbox compute fees dominate. As session hours grow, model inference costs converge — both providers approach the same per-token economics.</p>
-{f}{s}{c}{t}"#,
-        f = section("Parameters", &form_html),
+    let intro = r#"<h1>Harness pricing: OpenAI vs Anthropic</h1>
+<p class="subtitle">At low usage, sandbox compute fees dominate. As session hours grow, model inference costs converge — both providers approach the same per-token economics.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{s}{c}{t}",
         s = stats,
         c = section("Cost curves", &format!(r#"<div class="chart">{}</div>"#, chart)),
         t = section("Sample hours", &tbl),
     );
 
-    Html(page("Pricing", "/pricing", &body))
+    Html(respond(is_htmx(&headers), "Pricing", "/pricing", intro, &form_section, &results))
 }
 
 // =====================================================================
@@ -966,7 +967,7 @@ struct ThroughputParams {
     auto_fix_success: Option<f64>,
 }
 
-async fn throughput(Query(p): Query<ThroughputParams>) -> Html<String> {
+async fn throughput(headers: HeaderMap, Query(p): Query<ThroughputParams>) -> Html<String> {
     use physics::throughput::{
         net_fast_throughput, throughput_blocking, throughput_minimally_blocking, throughput_speedup,
     };
@@ -1032,15 +1033,15 @@ async fn throughput(Query(p): Query<ThroughputParams>) -> Html<String> {
         ],
     );
 
-    let body = format!(
-        r#"<h1>Throughput vs perfection</h1>
-<p class="subtitle">When agent PR output exceeds human review capacity, blocking review starves the pipeline. Minimally-blocking merge with auto-fix keeps net healthy throughput high.</p>
-{f}{s}{c}{t}"#,
-        f = section("Parameters", &form_html),
+    let intro = r#"<h1>Throughput vs perfection</h1>
+<p class="subtitle">When agent PR output exceeds human review capacity, blocking review starves the pipeline. Minimally-blocking merge with auto-fix keeps net healthy throughput high.</p>"#;
+    let form_section = section("Parameters", &form_html);
+    let results = format!(
+        "{s}{c}{t}",
         s = stats,
         c = section("Outcome breakdown", &format!(r#"<div class="chart">{}</div>"#, chart)),
         t = section("Per-outcome details", &tbl),
     );
 
-    Html(page("Throughput", "/throughput", &body))
+    Html(respond(is_htmx(&headers), "Throughput", "/throughput", intro, &form_section, &results))
 }

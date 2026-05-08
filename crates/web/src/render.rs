@@ -1,8 +1,9 @@
 //! HTML page chrome: layout, navigation, form helpers.
 //!
-//! Every page is rendered server-side as a complete HTML document. No
-//! client JavaScript is required — forms submit via GET and the server
-//! returns a fully rendered page with computed results.
+//! Pages are server-rendered HTML. HTMX is loaded so that form changes
+//! trigger partial re-renders of just the results section, without a full
+//! page reload — but the app degrades gracefully to plain GET form submits
+//! if JavaScript is disabled.
 
 use std::fmt::Write;
 
@@ -30,6 +31,9 @@ pub fn page(title: &str, current_path: &str, body: &str) -> String {
         t = html_escape(title)
     );
     s.push_str(STYLE);
+    // HTMX from CDN — used for partial page updates on form changes.
+    // If this fails to load, every form still works via plain GET submit.
+    s.push_str(r#"<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>"#);
     s.push_str("</head><body>");
 
     // Header
@@ -101,9 +105,17 @@ pub enum FieldKind<'a> {
 
 pub fn form(action: &str, fields: &[Field]) -> String {
     let mut s = String::new();
+    // HTMX attrs: live-update #results on input/change with a small debounce.
+    // Plain method=get/action=… fallback still works without JS.
     let _ = write!(
         s,
-        r#"<form class="params" method="get" action="{a}"><div class="params-grid">"#,
+        r##"<form class="params" method="get" action="{a}"
+              hx-get="{a}"
+              hx-target="#results"
+              hx-swap="innerHTML"
+              hx-trigger="change, input changed delay:400ms"
+              hx-push-url="true"
+              hx-indicator="#hx-indicator"><div class="params-grid">"##,
         a = action,
     );
     for f in fields {
@@ -172,6 +184,33 @@ pub fn section(title: &str, body: &str) -> String {
         html_escape(title),
         body
     )
+}
+
+/// Decide between full-page render and HTMX fragment based on the request.
+///
+/// HTMX sends `HX-Request: true` on partial updates; in that case we return
+/// just the results HTML and HTMX swaps it into `#results`. Otherwise we
+/// render the full page (form on top, then `#results` div with the same
+/// content). Both paths produce identical visible output — the difference is
+/// only whether the form/header gets re-rendered.
+pub fn respond(
+    is_htmx: bool,
+    title: &str,
+    path: &str,
+    intro_html: &str,
+    form_html: &str,
+    results_html: &str,
+) -> String {
+    if is_htmx {
+        return results_html.to_string();
+    }
+    let body = format!(
+        r#"{intro}{form}<div id="hx-indicator" class="hx-indicator">computing…</div><div id="results">{results}</div>"#,
+        intro = intro_html,
+        form = form_html,
+        results = results_html,
+    );
+    page(title, path, &body)
 }
 
 pub fn fmt_f(v: f64, decimals: usize) -> String {
@@ -415,4 +454,20 @@ table.data tr:hover td { background: var(--panel-2); }
 .tile p { margin: 0.4rem 0 0; color: var(--muted); font-size: 13px; }
 
 .ftr { text-align: center; color: var(--muted); padding: 1.5rem; font-size: 12px; }
+
+.hx-indicator {
+  display: none;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--cyan);
+  padding: 0.4rem 0.8rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 0 0 0.75rem;
+  width: fit-content;
+}
+#hx-indicator.htmx-request { display: inline-block; }
+#results.htmx-swapping { opacity: 0.5; transition: opacity 100ms ease-out; }
+#results { transition: opacity 200ms ease-in; }
 </style>"#;
