@@ -22,11 +22,7 @@ pub fn bubble_ratio(num_stages: usize, num_micro_batches: usize) -> f64 {
 ///
 /// With S stages and batch size B, the pipeline processes B tokens at
 /// the rate of the slowest stage (since next batch starts immediately).
-pub fn inference_throughput(
-    batch_size: f64,
-    _num_stages: usize,
-    stage_time: f64,
-) -> f64 {
+pub fn inference_throughput(batch_size: f64, _num_stages: usize, stage_time: f64) -> f64 {
     // Token throughput: B / stage_time per forward pass
     // No bubble — stages are continuously utilized
     batch_size / stage_time
@@ -92,8 +88,10 @@ mod tests {
             for mb in &[1, 2, 4, 8, 16] {
                 let ip = inference_throughput(1000.0, s, 0.01);
                 let tp = training_throughput(1000.0, s, *mb, 0.01);
-                assert!(tp <= ip + 1e-9,
-                    "training throughput ({tp}) should <= inference ({ip}) at S={s}, M={mb}");
+                assert!(
+                    tp <= ip + 1e-9,
+                    "training throughput ({tp}) should <= inference ({ip}) at S={s}, M={mb}"
+                );
             }
         }
     }

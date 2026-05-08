@@ -5,7 +5,11 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "train-modern-ai", version, about = "End-to-end ML infrastructure & agent harness learning module")]
+#[command(
+    name = "train-modern-ai",
+    version,
+    about = "End-to-end ML infrastructure & agent harness learning module"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -54,26 +58,53 @@ fn run_ml_infra() {
     println!("━━━ ML Infrastructure ━━━");
     let out = "/tmp/train-modern-ai-ml";
     std::fs::create_dir_all(out).ok();
-    let _ = experiments::ml_infra::roofline::run(std::path::Path::new(&format!("{out}/01_roofline.txt")));
-    let _ = experiments::ml_infra::cost_per_token::run(std::path::Path::new(&format!("{out}/02_cost.txt")));
-    let _ = experiments::ml_infra::context_length::run(std::path::Path::new(&format!("{out}/03_context.txt")));
-    let _ = experiments::ml_infra::moe_routing::run(std::path::Path::new(&format!("{out}/04_moe.txt")));
-    let _ = experiments::ml_infra::pipeline::run(std::path::Path::new(&format!("{out}/05_pipeline.txt")));
-    let _ = experiments::ml_infra::memory_tiers::run(std::path::Path::new(&format!("{out}/06_memory.txt")));
-    let _ = experiments::ml_infra::scaling_laws::run(std::path::Path::new(&format!("{out}/07_scaling.txt")));
+    let _ = experiments::ml_infra::roofline::run(std::path::Path::new(&format!(
+        "{out}/01_roofline.txt"
+    )));
+    let _ = experiments::ml_infra::cost_per_token::run(std::path::Path::new(&format!(
+        "{out}/02_cost.txt"
+    )));
+    let _ = experiments::ml_infra::context_length::run(std::path::Path::new(&format!(
+        "{out}/03_context.txt"
+    )));
+    let _ =
+        experiments::ml_infra::moe_routing::run(std::path::Path::new(&format!("{out}/04_moe.txt")));
+    let _ = experiments::ml_infra::pipeline::run(std::path::Path::new(&format!(
+        "{out}/05_pipeline.txt"
+    )));
+    let _ = experiments::ml_infra::memory_tiers::run(std::path::Path::new(&format!(
+        "{out}/06_memory.txt"
+    )));
+    let _ = experiments::ml_infra::scaling_laws::run(std::path::Path::new(&format!(
+        "{out}/07_scaling.txt"
+    )));
 }
 
 fn run_harness() {
     println!("━━━ Agent Harness ━━━");
     let out = "/tmp/train-modern-ai-harness";
     std::fs::create_dir_all(out).ok();
-    let _ = experiments::harness::harness_effectiveness::run(std::path::Path::new(&format!("{out}/01_effectiveness.txt")));
-    let _ = experiments::harness::throughput_vs_perfection::run(std::path::Path::new(&format!("{out}/02_throughput.txt")));
-    let _ = experiments::harness::multi_agent_coordination::run(std::path::Path::new(&format!("{out}/03_coordination.txt")));
-    let _ = experiments::harness::knowledge_decay::run(std::path::Path::new(&format!("{out}/04_knowledge.txt")));
-    let _ = experiments::harness::agent_review_pipeline::run(std::path::Path::new(&format!("{out}/05_reviews.txt")));
-    let _ = experiments::harness::harness_pricing::run(std::path::Path::new(&format!("{out}/06_pricing.txt")));
-    let _ = experiments::harness::context_window_economics::run(std::path::Path::new(&format!("{out}/07_context.txt")));
+    let _ = experiments::harness::harness_effectiveness::run(std::path::Path::new(&format!(
+        "{out}/01_effectiveness.txt"
+    )));
+    let _ = experiments::harness::throughput_vs_perfection::run(std::path::Path::new(&format!(
+        "{out}/02_throughput.txt"
+    )));
+    let _ = experiments::harness::multi_agent_coordination::run(std::path::Path::new(&format!(
+        "{out}/03_coordination.txt"
+    )));
+    let _ = experiments::harness::knowledge_decay::run(std::path::Path::new(&format!(
+        "{out}/04_knowledge.txt"
+    )));
+    let _ = experiments::harness::agent_review_pipeline::run(std::path::Path::new(&format!(
+        "{out}/05_reviews.txt"
+    )));
+    let _ = experiments::harness::harness_pricing::run(std::path::Path::new(&format!(
+        "{out}/06_pricing.txt"
+    )));
+    let _ = experiments::harness::context_window_economics::run(std::path::Path::new(&format!(
+        "{out}/07_context.txt"
+    )));
 }
 
 fn run_one(name: &str) {

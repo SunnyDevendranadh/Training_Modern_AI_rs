@@ -19,7 +19,11 @@ pub const NAV: &[(&str, &str, &str)] = &[
     ("/pricing", "Pricing", "OpenAI vs Anthropic"),
     ("/agents-md", "AGENTS.md", "Passive context sweet spot"),
     ("/coordination", "Coordination", "Multi-agent strategies"),
-    ("/throughput", "Throughput", "Blocking vs minimally-blocking"),
+    (
+        "/throughput",
+        "Throughput",
+        "Blocking vs minimally-blocking",
+    ),
 ];
 
 pub fn page(title: &str, current_path: &str, body: &str) -> String {
@@ -31,9 +35,15 @@ pub fn page(title: &str, current_path: &str, body: &str) -> String {
         t = html_escape(title)
     );
     s.push_str(STYLE);
-    // HTMX from CDN — used for partial page updates on form changes.
-    // If this fails to load, every form still works via plain GET submit.
-    s.push_str(r#"<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>"#);
+    // Tiny vanilla-JS enhancement layer (~40 lines, audit it inline).
+    // It hooks `change` and debounced `input` events on the parameter form,
+    // fetches the same URL with an `HX-Request: true` header, swaps the
+    // result fragment into `#results`, and updates the URL — all without
+    // a full page reload.
+    //
+    // No external dependencies. If JS is disabled or this script fails,
+    // every form still works via plain method="get" submit.
+    s.push_str(LIVE_UPDATE_SCRIPT);
     s.push_str("</head><body>");
 
     // Header
@@ -52,7 +62,9 @@ pub fn page(title: &str, current_path: &str, body: &str) -> String {
     // Body
     let _ = write!(s, r#"<main class="container">{}</main>"#, body);
 
-    s.push_str(r#"<footer class="ftr">85 tests · 14 experiments · pure Rust · server-rendered</footer>"#);
+    s.push_str(
+        r#"<footer class="ftr">85 tests · 14 experiments · pure Rust · server-rendered</footer>"#,
+    );
     s.push_str("</body></html>");
     s
 }
@@ -65,8 +77,16 @@ pub struct Stat {
 }
 
 impl Stat {
-    pub fn new(label: impl Into<String>, value: impl Into<String>, hint: impl Into<String>) -> Self {
-        Self { label: label.into(), value: value.into(), hint: hint.into() }
+    pub fn new(
+        label: impl Into<String>,
+        value: impl Into<String>,
+        hint: impl Into<String>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            value: value.into(),
+            hint: hint.into(),
+        }
     }
 }
 
@@ -94,28 +114,19 @@ pub struct Field<'a> {
 }
 
 pub enum FieldKind<'a> {
-    Number {
-        step: &'a str,
-        min: Option<&'a str>,
-    },
-    Select {
-        options: &'a [(&'a str, &'a str)],
-    },
+    Number { step: &'a str, min: Option<&'a str> },
+    Select { options: &'a [(&'a str, &'a str)] },
 }
 
 pub fn form(action: &str, fields: &[Field]) -> String {
     let mut s = String::new();
     // HTMX attrs: live-update #results on input/change with a small debounce.
     // Plain method=get/action=… fallback still works without JS.
+    // method=get/action= keeps the no-JS fallback working. The custom JS
+    // attaches itself to forms with class="params" and intercepts changes.
     let _ = write!(
         s,
-        r##"<form class="params" method="get" action="{a}"
-              hx-get="{a}"
-              hx-target="#results"
-              hx-swap="innerHTML"
-              hx-trigger="change, input changed delay:400ms"
-              hx-push-url="true"
-              hx-indicator="#hx-indicator"><div class="params-grid">"##,
+        r#"<form class="params" method="get" action="{a}"><div class="params-grid">"#,
         a = action,
     );
     for f in fields {
@@ -126,9 +137,7 @@ pub fn form(action: &str, fields: &[Field]) -> String {
         );
         match &f.kind {
             FieldKind::Number { step, min } => {
-                let min_attr = min
-                    .map(|m| format!(r#" min="{}""#, m))
-                    .unwrap_or_default();
+                let min_attr = min.map(|m| format!(r#" min="{}""#, m)).unwrap_or_default();
                 let _ = write!(
                     s,
                     r#"<input type="number" inputmode="decimal" name="{n}" value="{v}" step="{step}"{min_attr}>"#,
@@ -242,7 +251,7 @@ pub fn fmt_num(v: f64) -> String {
     if v.fract() == 0.0 && a < 1e6 {
         return format!("{}", v as i64);
     }
-    if a >= 1e5 || a < 1e-3 {
+    if !(1e-3..1e5).contains(&a) {
         // Compact scientific: trim trailing zeros from mantissa
         let s = format!("{:e}", v);
         return s;
@@ -291,6 +300,63 @@ pub fn fmt_usd(v: f64) -> String {
         format!("${:.6}", v)
     }
 }
+
+/// Tiny vanilla-JS enhancement: debounced live form updates.
+///
+/// Hooks the parameter form on each page. On `change` (immediate) or
+/// debounced `input`, refetches the page URL with form data and
+/// `HX-Request: true` header. The server responds with just the
+/// `#results` fragment, which we swap in place. URL is updated via
+/// `history.replaceState` so the back button still works.
+///
+/// Approximately 35 lines of code. No external dependencies. If this
+/// script fails or JS is disabled, the form falls back to the standard
+/// `<form method="get">` submit (full-page reload).
+const LIVE_UPDATE_SCRIPT: &str = r#"<script>
+(function () {
+  'use strict';
+  var DEBOUNCE_MS = 400;
+  document.addEventListener('DOMContentLoaded', function () {
+    var form = document.querySelector('form.params');
+    var target = document.getElementById('results');
+    var indicator = document.getElementById('hx-indicator');
+    if (!form || !target) return;
+    var timer = null;
+    function update() {
+      var params = new URLSearchParams(new FormData(form));
+      var url = form.getAttribute('action') + '?' + params.toString();
+      if (indicator) indicator.style.display = 'inline-block';
+      target.style.opacity = '0.5';
+      fetch(url, { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        })
+        .then(function (html) {
+          target.innerHTML = html;
+          if (history && history.replaceState) {
+            history.replaceState(null, '', url);
+          }
+        })
+        .catch(function (err) { console.error('Live update failed:', err); })
+        .then(function () {
+          if (indicator) indicator.style.display = 'none';
+          target.style.opacity = '1';
+        });
+    }
+    form.addEventListener('change', function () { clearTimeout(timer); update(); });
+    form.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(update, DEBOUNCE_MS);
+    });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(timer);
+      update();
+    });
+  });
+})();
+</script>"#;
 
 const STYLE: &str = r#"<style>
 :root {

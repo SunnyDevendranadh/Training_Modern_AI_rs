@@ -23,6 +23,7 @@ pub fn rack_cost_per_sec(gpu_cost_per_hour: f64, gpus: usize) -> f64 {
 ///
 /// Cost is proportional to GPU time. Bigger batches amortize weight fetch
 /// over more tokens, reducing per-token cost.
+#[allow(clippy::too_many_arguments)]
 pub fn cost_per_million_tokens(
     batch_size: &Array1<f64>,
     n_active: f64,
@@ -35,8 +36,14 @@ pub fn cost_per_million_tokens(
     rack_cost: f64,
 ) -> Array1<f64> {
     let (total, _, _, _) = total_latency(
-        batch_size, n_active, n_total, context_length,
-        bytes_per_param, bpt, flops, mem_bw,
+        batch_size,
+        n_active,
+        n_total,
+        context_length,
+        bytes_per_param,
+        bpt,
+        flops,
+        mem_bw,
     );
     total * rack_cost / batch_size * 1e6
 }
@@ -44,11 +51,7 @@ pub fn cost_per_million_tokens(
 /// Minimum achievable cost per million tokens (the compute floor).
 ///
 /// At infinite batch size, cost approaches the compute cost alone.
-pub fn compute_cost_floor(
-    n_active: f64,
-    flops: f64,
-    rack_cost: f64,
-) -> f64 {
+pub fn compute_cost_floor(n_active: f64, flops: f64, rack_cost: f64) -> f64 {
     // At infinite batch: time per token = n_active * 2 / flops
     // cost = time * rack_cost
     n_active * constants::FLOPS_PER_MAC / flops * rack_cost * 1e6
@@ -57,6 +60,7 @@ pub fn compute_cost_floor(
 /// Cost ratio between decode (batch_eff=1) and a prefill pass of given length.
 ///
 /// This models why output tokens cost ~5× input tokens.
+#[allow(clippy::too_many_arguments)]
 pub fn decode_prefill_cost_ratio(
     prefill_pass_length: f64,
     batch_size: f64,
@@ -72,13 +76,19 @@ pub fn decode_prefill_cost_ratio(
     let bs_decode = Array1::from_elem(1, batch_size);
     let cl_decode = Array1::from_elem(1, context_length);
     let cost_decode = cost_per_million_tokens(
-        &bs_decode, n_active, n_total, &cl_decode,
-        bytes_per_param, bpt, flops, mem_bw, rack_cost,
+        &bs_decode,
+        n_active,
+        n_total,
+        &cl_decode,
+        bytes_per_param,
+        bpt,
+        flops,
+        mem_bw,
+        rack_cost,
     );
 
     // Prefill: pass_length tokens processed in parallel, cost amortized
-    let cost_prefill_per_token = cost_decode[0] / prefill_pass_length
-        .min(bs_decode[0].max(1.0));
+    let cost_prefill_per_token = cost_decode[0] / prefill_pass_length.min(bs_decode[0].max(1.0));
 
     cost_decode[0] / cost_prefill_per_token.max(1e-12)
 }
@@ -86,6 +96,7 @@ pub fn decode_prefill_cost_ratio(
 /// Compute the Pareto frontier tuple (cost, latency) for a range of batch sizes.
 ///
 /// Useful for plotting the "Fast Mode" vs "Slow Mode" trade-off.
+#[allow(clippy::too_many_arguments)]
 pub fn pareto_curve(
     batch_sizes: &Array1<f64>,
     n_active: f64,
@@ -98,12 +109,25 @@ pub fn pareto_curve(
     rack_cost: f64,
 ) -> (Array1<f64>, Array1<f64>) {
     let cost = cost_per_million_tokens(
-        batch_sizes, n_active, n_total, context_length,
-        bytes_per_param, bpt, flops, mem_bw, rack_cost,
+        batch_sizes,
+        n_active,
+        n_total,
+        context_length,
+        bytes_per_param,
+        bpt,
+        flops,
+        mem_bw,
+        rack_cost,
     );
     let (total, _, _, _) = total_latency(
-        batch_sizes, n_active, n_total, context_length,
-        bytes_per_param, bpt, flops, mem_bw,
+        batch_sizes,
+        n_active,
+        n_total,
+        context_length,
+        bytes_per_param,
+        bpt,
+        flops,
+        mem_bw,
     );
     (cost, total)
 }
@@ -112,11 +136,11 @@ pub fn pareto_curve(
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    use constants::{
-        BYTES_PER_TOKEN, CONTEXT_LENGTH, FLOPS, GPU_COST_PER_HOUR, GPUS_IN_RACK,
-        MEM_BW, N_ACTIVE, N_TOTAL,
-    };
     use constants::BYTES_PER_PARAM_FP8;
+    use constants::{
+        BYTES_PER_TOKEN, CONTEXT_LENGTH, FLOPS, GPUS_IN_RACK, GPU_COST_PER_HOUR, MEM_BW, N_ACTIVE,
+        N_TOTAL,
+    };
 
     fn default_rack_cost() -> f64 {
         rack_cost_per_sec(GPU_COST_PER_HOUR, GPUS_IN_RACK)
@@ -143,17 +167,34 @@ mod tests {
         let rc = default_rack_cost();
 
         let cost_small = cost_per_million_tokens(
-            &bs_small, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bs_small,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
         let cost_large = cost_per_million_tokens(
-            &bs_large, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bs_large,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
 
-        assert!(cost_small[0] > cost_large[0],
+        assert!(
+            cost_small[0] > cost_large[0],
             "cost should decrease with larger batch: small={}, large={}",
-            cost_small[0], cost_large[0]);
+            cost_small[0],
+            cost_large[0]
+        );
     }
 
     #[test]
@@ -163,12 +204,23 @@ mod tests {
         let rc = default_rack_cost();
 
         let cost = cost_per_million_tokens(
-            &bs, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bs,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
 
         // At batch=1, cost should be very high (no amortization)
-        assert!(cost[0] > 1.0, "cost at batch=1 should be > $1/M tokens, got ${:.4}", cost[0]);
+        assert!(
+            cost[0] > 1.0,
+            "cost at batch=1 should be > $1/M tokens, got ${:.4}",
+            cost[0]
+        );
     }
 
     #[test]
@@ -177,7 +229,11 @@ mod tests {
         let floor = compute_cost_floor(N_ACTIVE, FLOPS, rc);
         assert!(floor > 0.0);
         // Floor should be relatively small — raw compute is cheap
-        assert!(floor < 10.0, "compute floor suspiciously high: ${:.6}", floor);
+        assert!(
+            floor < 10.0,
+            "compute floor suspiciously high: ${:.6}",
+            floor
+        );
     }
 
     #[test]
@@ -188,32 +244,58 @@ mod tests {
         let floor = compute_cost_floor(N_ACTIVE, FLOPS, rc);
 
         let cost = cost_per_million_tokens(
-            &bs, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bs,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
 
         let min_cost = cost.iter().cloned().fold(f64::INFINITY, f64::min);
         // Cost should be above floor (or very close, allowing for numerical issues)
-        assert!(min_cost >= floor * 0.9,
-            "cost floor violated: min={min_cost:.6}, floor={floor:.6}");
+        assert!(
+            min_cost >= floor * 0.9,
+            "cost floor violated: min={min_cost:.6}, floor={floor:.6}"
+        );
     }
 
     #[test]
     fn decode_prefill_ratio_greater_than_one() {
         let ratio = decode_prefill_cost_ratio(
-            2048.0, 64.0, N_ACTIVE, N_TOTAL, CONTEXT_LENGTH,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW,
+            2048.0,
+            64.0,
+            N_ACTIVE,
+            N_TOTAL,
+            CONTEXT_LENGTH,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
             default_rack_cost(),
         );
         // Decode should cost more per token than prefill
-        assert!(ratio > 1.0, "decode should cost more than prefill per token");
+        assert!(
+            ratio > 1.0,
+            "decode should cost more than prefill per token"
+        );
     }
 
     #[test]
     fn decode_cost_ratio_in_reasonable_range() {
         let ratio = decode_prefill_cost_ratio(
-            2048.0, 64.0, N_ACTIVE, N_TOTAL, CONTEXT_LENGTH,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW,
+            2048.0,
+            64.0,
+            N_ACTIVE,
+            N_TOTAL,
+            CONTEXT_LENGTH,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
             default_rack_cost(),
         );
         // Typical API pricing is 3-50× for output vs input.
@@ -229,8 +311,15 @@ mod tests {
         let rc = default_rack_cost();
 
         let (cost, latency) = pareto_curve(
-            &bs, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bs,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
         assert_eq!(cost.len(), 4);
         assert_eq!(latency.len(), 4);
@@ -245,17 +334,34 @@ mod tests {
         let rc = default_rack_cost();
 
         let c1 = cost_per_million_tokens(
-            &bs1, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bs1,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
         let c2 = cost_per_million_tokens(
-            &bs2, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bs2,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
 
         let ratio = c1[0] / c2[0];
         // Should be roughly 2 (inverse of batch ratio) when memory-bound
-        assert!(ratio > 1.5, "cost should scale inversely with batch at low batch");
+        assert!(
+            ratio > 1.5,
+            "cost should scale inversely with batch at low batch"
+        );
         assert!(ratio < 3.0, "batch scaling seems off: ratio={}", ratio);
     }
 }

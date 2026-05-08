@@ -72,12 +72,12 @@ mod tests {
     fn single_agent_is_fully_effective() {
         // One agent working alone should be highly effective
         // (Pipeline has lower efficiency at N=1 — designed for multi-agent)
-        for strategy in [
-            CoordinationStrategy::Equal,
-            CoordinationStrategy::Recursive,
-        ] {
+        for strategy in [CoordinationStrategy::Equal, CoordinationStrategy::Recursive] {
             let eff = effective_throughput(1, strategy);
-            assert!(eff > 0.70, "{strategy}: single agent should be > 0.70 effective, got {eff}");
+            assert!(
+                eff > 0.70,
+                "{strategy}: single agent should be > 0.70 effective, got {eff}"
+            );
         }
     }
 
@@ -106,8 +106,10 @@ mod tests {
         let eff_10 = effective_throughput(10, CoordinationStrategy::Continuous);
         let eff_20 = effective_throughput(20, CoordinationStrategy::Continuous);
         // Beyond 10, effective throughput should regress
-        assert!(eff_20 / 20.0 < eff_10 / 10.0,
-            "continuous should have lower efficiency at 20 than 10");
+        assert!(
+            eff_20 / 20.0 < eff_10 / 10.0,
+            "continuous should have lower efficiency at 20 than 10"
+        );
     }
 
     #[test]
@@ -116,7 +118,11 @@ mod tests {
         let mut prev = effective_throughput(1, CoordinationStrategy::Recursive);
         for n in 2..=100 {
             let curr = effective_throughput(n, CoordinationStrategy::Recursive);
-            assert!(curr > prev, "recursive should be monotonic: N={n} ({curr}) <= N={} ({prev})", n-1);
+            assert!(
+                curr > prev,
+                "recursive should be monotonic: N={n} ({curr}) <= N={} ({prev})",
+                n - 1
+            );
             prev = curr;
         }
     }

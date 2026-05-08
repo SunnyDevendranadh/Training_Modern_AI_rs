@@ -109,24 +109,57 @@ async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<S
     let (total, tc, tw, tk) =
         total_latency(&bs, n_active, n_total, &ctx_arr, bpp, bpt, flops_v, mem_bw);
 
-    let (idx, balance_bs, _) =
-        physics::latency::find_balance_point(&bs, n_active, n_total, &ctx_arr, bpp, bpt, flops_v, mem_bw);
+    let (idx, balance_bs, _) = physics::latency::find_balance_point(
+        &bs, n_active, n_total, &ctx_arr, bpp, bpt, flops_v, mem_bw,
+    );
     let balance_lat_ms = total[idx] * 1000.0;
     let lat_floor_ms = total[0] * 1000.0;
     let weights_ms = tw[0] * 1000.0;
 
     let stats = stats_grid(&[
-        Stat::new("Balance batch size", fmt_eng(balance_bs), "compute time = memory time"),
-        Stat::new("Latency at balance", format!("{} ms", fmt_f(balance_lat_ms, 1)), "Min cost-per-token regime"),
-        Stat::new("Latency floor (B=1)", format!("{} ms", fmt_f(lat_floor_ms, 1)), "Memory-bound; physics, not engineering"),
-        Stat::new("Weight fetch", format!("{} ms", fmt_f(weights_ms, 1)), "N_total × bytes/param ÷ bandwidth"),
+        Stat::new(
+            "Balance batch size",
+            fmt_eng(balance_bs),
+            "compute time = memory time",
+        ),
+        Stat::new(
+            "Latency at balance",
+            format!("{} ms", fmt_f(balance_lat_ms, 1)),
+            "Min cost-per-token regime",
+        ),
+        Stat::new(
+            "Latency floor (B=1)",
+            format!("{} ms", fmt_f(lat_floor_ms, 1)),
+            "Memory-bound; physics, not engineering",
+        ),
+        Stat::new(
+            "Weight fetch",
+            format!("{} ms", fmt_f(weights_ms, 1)),
+            "N_total × bytes/param ÷ bandwidth",
+        ),
     ]);
 
     // Chart
-    let series: Vec<(f64, f64)> = bs.iter().zip(total.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
-    let s_compute: Vec<(f64, f64)> = bs.iter().zip(tc.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
-    let s_weights: Vec<(f64, f64)> = bs.iter().zip(tw.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
-    let s_kv: Vec<(f64, f64)> = bs.iter().zip(tk.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
+    let series: Vec<(f64, f64)> = bs
+        .iter()
+        .zip(total.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
+    let s_compute: Vec<(f64, f64)> = bs
+        .iter()
+        .zip(tc.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
+    let s_weights: Vec<(f64, f64)> = bs
+        .iter()
+        .zip(tw.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
+    let s_kv: Vec<(f64, f64)> = bs
+        .iter()
+        .zip(tk.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
 
     let bal_label = format!("balance≈{}", fmt_eng(balance_bs));
     let chart = LineChart {
@@ -136,10 +169,26 @@ async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<S
         x_scale: Scale::Log10,
         y_scale: Scale::Log10,
         series: vec![
-            Series { name: "Total",   color: "#00d4ff", points: series },
-            Series { name: "Compute", color: "#22c55e", points: s_compute },
-            Series { name: "Weights", color: "#a855f7", points: s_weights },
-            Series { name: "KV cache",color: "#f59e0b", points: s_kv },
+            Series {
+                name: "Total",
+                color: "#00d4ff",
+                points: series,
+            },
+            Series {
+                name: "Compute",
+                color: "#22c55e",
+                points: s_compute,
+            },
+            Series {
+                name: "Weights",
+                color: "#a855f7",
+                points: s_weights,
+            },
+            Series {
+                name: "KV cache",
+                color: "#f59e0b",
+                points: s_kv,
+            },
         ],
         markers: vec![Marker {
             axis: Axis::X,
@@ -164,7 +213,11 @@ async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<S
             format!("{} ms", fmt_f(ttc[0] * 1000.0, 2)),
             format!("{} ms", fmt_f(ttw[0] * 1000.0, 2)),
             format!("{} ms", fmt_f(ttk[0] * 1000.0, 2)),
-            if ttc[0] > ttw[0] + ttk[0] { "compute".into() } else { "memory".into() },
+            if ttc[0] > ttw[0] + ttk[0] {
+                "compute".into()
+            } else {
+                "memory".into()
+            },
         ]);
     }
     let tbl = table(
@@ -180,21 +233,30 @@ async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<S
                 label: "Active params (per token)",
                 hint: "Default 37e9 (37B for sparse MoE)",
                 value: fmt_num(n_active),
-                kind: FieldKind::Number { step: "1e9", min: Some("1e6") },
+                kind: FieldKind::Number {
+                    step: "1e9",
+                    min: Some("1e6"),
+                },
             },
             Field {
                 name: "n_total",
                 label: "Total params",
                 hint: "Default 700e9 (full MoE)",
                 value: fmt_num(n_total),
-                kind: FieldKind::Number { step: "1e9", min: Some("1e6") },
+                kind: FieldKind::Number {
+                    step: "1e9",
+                    min: Some("1e6"),
+                },
             },
             Field {
                 name: "context",
                 label: "Context length (tokens)",
                 hint: "Default 32,768",
                 value: fmt_f(ctx_len, 0),
-                kind: FieldKind::Number { step: "1024", min: Some("1") },
+                kind: FieldKind::Number {
+                    step: "1024",
+                    min: Some("1"),
+                },
             },
             Field {
                 name: "bytes_per_param",
@@ -202,7 +264,11 @@ async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<S
                 hint: "FP8 = 1.0, FP4 = 0.5",
                 value: fmt_f(bpp, 1),
                 kind: FieldKind::Select {
-                    options: &[("0.5", "FP4 (0.5)"), ("1.0", "FP8 (1.0)"), ("2.0", "FP16 (2.0)")],
+                    options: &[
+                        ("0.5", "FP4 (0.5)"),
+                        ("1.0", "FP8 (1.0)"),
+                        ("2.0", "FP16 (2.0)"),
+                    ],
                 },
             },
             Field {
@@ -210,21 +276,30 @@ async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<S
                 label: "FLOPS (rack aggregate)",
                 hint: "Default 1.5e15 (Blackwell-NVL72)",
                 value: fmt_num(flops_v),
-                kind: FieldKind::Number { step: "1e14", min: Some("1e12") },
+                kind: FieldKind::Number {
+                    step: "1e14",
+                    min: Some("1e12"),
+                },
             },
             Field {
                 name: "mem_bw",
                 label: "Memory bandwidth (B/s)",
                 hint: "Default 5e12 (HBM aggregate)",
                 value: fmt_num(mem_bw),
-                kind: FieldKind::Number { step: "1e11", min: Some("1e10") },
+                kind: FieldKind::Number {
+                    step: "1e11",
+                    min: Some("1e10"),
+                },
             },
             Field {
                 name: "bytes_per_token",
                 label: "KV bytes / token",
                 hint: "Default 2048",
                 value: fmt_f(bpt, 0),
-                kind: FieldKind::Number { step: "256", min: Some("1") },
+                kind: FieldKind::Number {
+                    step: "256",
+                    min: Some("1"),
+                },
             },
         ],
     );
@@ -235,11 +310,21 @@ async fn roofline(headers: HeaderMap, Query(p): Query<RooflineParams>) -> Html<S
     let results = format!(
         "{stats}{chart_section}{table_section}",
         stats = stats,
-        chart_section = section("Latency decomposition", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        chart_section = section(
+            "Latency decomposition",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         table_section = section("Sample batch sizes", &tbl),
     );
 
-    Html(respond(is_htmx(&headers), "Roofline", "/roofline", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "Roofline",
+        "/roofline",
+        intro,
+        &form_section,
+        &results,
+    ))
 }
 
 // =====================================================================
@@ -268,10 +353,26 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
     let bs = Array1::logspace(10.0, 0.0, 5.0, 300);
     let ctx_arr = Array1::from_elem(300, ctx_len);
     let cost_arr = cost_per_million_tokens(
-        &bs, n_active, n_total, &ctx_arr, bpp, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+        &bs,
+        n_active,
+        n_total,
+        &ctx_arr,
+        bpp,
+        BYTES_PER_TOKEN,
+        FLOPS,
+        MEM_BW,
+        rc,
     );
-    let (total_lat, _, _, _) =
-        total_latency(&bs, n_active, n_total, &ctx_arr, bpp, BYTES_PER_TOKEN, FLOPS, MEM_BW);
+    let (total_lat, _, _, _) = total_latency(
+        &bs,
+        n_active,
+        n_total,
+        &ctx_arr,
+        bpp,
+        BYTES_PER_TOKEN,
+        FLOPS,
+        MEM_BW,
+    );
 
     let floor = physics::cost::compute_cost_floor(n_active, FLOPS, rc);
     // "Knee" of the cost curve: the smallest batch where the cost is within
@@ -286,9 +387,21 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
     let knee_lat = total_lat[knee_idx] * 1000.0;
 
     let stats = stats_grid(&[
-        Stat::new("Compute floor", fmt_usd(floor), "Asymptotic $/M tokens at infinite batch"),
-        Stat::new("Knee batch", fmt_eng(knee_batch), "First batch within 10% of the floor"),
-        Stat::new("Cost at knee", fmt_usd(knee_cost), "$ / M tokens at that batch"),
+        Stat::new(
+            "Compute floor",
+            fmt_usd(floor),
+            "Asymptotic $/M tokens at infinite batch",
+        ),
+        Stat::new(
+            "Knee batch",
+            fmt_eng(knee_batch),
+            "First batch within 10% of the floor",
+        ),
+        Stat::new(
+            "Cost at knee",
+            fmt_usd(knee_cost),
+            "$ / M tokens at that batch",
+        ),
         Stat::new(
             "Latency at knee",
             format!("{} ms", fmt_f(knee_lat, 1)),
@@ -296,8 +409,11 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
         ),
     ]);
 
-    let cost_pts: Vec<(f64, f64)> =
-        bs.iter().zip(cost_arr.iter()).map(|(&x, &y)| (x, y)).collect();
+    let cost_pts: Vec<(f64, f64)> = bs
+        .iter()
+        .zip(cost_arr.iter())
+        .map(|(&x, &y)| (x, y))
+        .collect();
     let chart = LineChart {
         title: "Cost vs batch size (log–log)",
         x_label: "Batch size",
@@ -323,10 +439,26 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
         let bb = Array1::from_elem(1, b);
         let cc = Array1::from_elem(1, ctx_len);
         let cv = cost_per_million_tokens(
-            &bb, n_active, n_total, &cc, bpp, BYTES_PER_TOKEN, FLOPS, MEM_BW, rc,
+            &bb,
+            n_active,
+            n_total,
+            &cc,
+            bpp,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+            rc,
         );
-        let (lt, _, _, _) =
-            total_latency(&bb, n_active, n_total, &cc, bpp, BYTES_PER_TOKEN, FLOPS, MEM_BW);
+        let (lt, _, _, _) = total_latency(
+            &bb,
+            n_active,
+            n_total,
+            &cc,
+            bpp,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
+        );
         rows.push(vec![
             fmt_eng(b),
             fmt_usd(cv[0]),
@@ -334,7 +466,10 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
             format!("{}× floor", fmt_f(cv[0] / floor.max(1e-12), 1)),
         ]);
     }
-    let tbl = table(&["Batch", "Cost / M tok", "Latency", "Multiple of floor"], &rows);
+    let tbl = table(
+        &["Batch", "Cost / M tok", "Latency", "Multiple of floor"],
+        &rows,
+    );
 
     let form_html = form(
         "/cost",
@@ -344,21 +479,30 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
                 label: "Active params",
                 hint: "Default 37e9",
                 value: fmt_num(n_active),
-                kind: FieldKind::Number { step: "1e9", min: Some("1e6") },
+                kind: FieldKind::Number {
+                    step: "1e9",
+                    min: Some("1e6"),
+                },
             },
             Field {
                 name: "n_total",
                 label: "Total params",
                 hint: "Default 700e9",
                 value: fmt_num(n_total),
-                kind: FieldKind::Number { step: "1e9", min: Some("1e6") },
+                kind: FieldKind::Number {
+                    step: "1e9",
+                    min: Some("1e6"),
+                },
             },
             Field {
                 name: "context",
                 label: "Context length",
                 hint: "Default 32,768",
                 value: fmt_f(ctx_len, 0),
-                kind: FieldKind::Number { step: "1024", min: Some("1") },
+                kind: FieldKind::Number {
+                    step: "1024",
+                    min: Some("1"),
+                },
             },
             Field {
                 name: "bytes_per_param",
@@ -366,7 +510,11 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
                 hint: "FP8 = 1.0",
                 value: fmt_f(bpp, 1),
                 kind: FieldKind::Select {
-                    options: &[("0.5", "FP4 (0.5)"), ("1.0", "FP8 (1.0)"), ("2.0", "FP16 (2.0)")],
+                    options: &[
+                        ("0.5", "FP4 (0.5)"),
+                        ("1.0", "FP8 (1.0)"),
+                        ("2.0", "FP16 (2.0)"),
+                    ],
                 },
             },
             Field {
@@ -374,14 +522,20 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
                 label: "GPU $/hour",
                 hint: "Default $2.00",
                 value: fmt_f(gph, 2),
-                kind: FieldKind::Number { step: "0.10", min: Some("0.01") },
+                kind: FieldKind::Number {
+                    step: "0.10",
+                    min: Some("0.01"),
+                },
             },
             Field {
                 name: "gpus_in_rack",
                 label: "GPUs in rack",
                 hint: "Default 72 (NVL72)",
                 value: gpus.to_string(),
-                kind: FieldKind::Number { step: "1", min: Some("1") },
+                kind: FieldKind::Number {
+                    step: "1",
+                    min: Some("1"),
+                },
             },
         ],
     );
@@ -392,11 +546,21 @@ async fn cost(headers: HeaderMap, Query(p): Query<CostParams>) -> Html<String> {
     let results = format!(
         "{s}{c}{t}",
         s = stats,
-        c = section("Cost curve", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        c = section(
+            "Cost curve",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         t = section("Sample batch sizes", &tbl),
     );
 
-    Html(respond(is_htmx(&headers), "Cost", "/cost", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "Cost",
+        "/cost",
+        intro,
+        &form_section,
+        &results,
+    ))
 }
 
 // =====================================================================
@@ -448,16 +612,40 @@ async fn context(headers: HeaderMap, Query(p): Query<ContextParams>) -> Html<Str
             format!("{} tok", fmt_eng(kv_weight_crossover)),
             "KV-cache time catches weight-fetch time",
         ),
-        Stat::new("Latency @ 32k", format!("{} ms", fmt_f(lat_at(32_768.0), 1)), "At given batch"),
-        Stat::new("Latency @ 1M", format!("{} ms", fmt_f(lat_at(1_000_000.0), 1)), "Memory-bandwidth wall"),
+        Stat::new(
+            "Latency @ 32k",
+            format!("{} ms", fmt_f(lat_at(32_768.0), 1)),
+            "At given batch",
+        ),
+        Stat::new(
+            "Latency @ 1M",
+            format!("{} ms", fmt_f(lat_at(1_000_000.0), 1)),
+            "Memory-bandwidth wall",
+        ),
         Stat::new("Batch (fixed)", fmt_eng(batch), "Sequences per forward"),
     ]);
 
-    let s_total: Vec<(f64, f64)> = ctx.iter().zip(total.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
-    let s_compute: Vec<(f64, f64)> = ctx.iter().zip(tc.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
-    let s_kv: Vec<(f64, f64)> = ctx.iter().zip(tk.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
+    let s_total: Vec<(f64, f64)> = ctx
+        .iter()
+        .zip(total.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
+    let s_compute: Vec<(f64, f64)> = ctx
+        .iter()
+        .zip(tc.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
+    let s_kv: Vec<(f64, f64)> = ctx
+        .iter()
+        .zip(tk.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
 
-    let s_weights: Vec<(f64, f64)> = ctx.iter().zip(tw.iter()).map(|(&x, &y)| (x, y * 1000.0)).collect();
+    let s_weights: Vec<(f64, f64)> = ctx
+        .iter()
+        .zip(tw.iter())
+        .map(|(&x, &y)| (x, y * 1000.0))
+        .collect();
     let cross_label = format!("KV=weights @{}", fmt_eng(kv_weight_crossover));
     let mut markers = vec![];
     if kv_weight_crossover.is_finite() && kv_weight_crossover > 1.0 {
@@ -475,10 +663,26 @@ async fn context(headers: HeaderMap, Query(p): Query<ContextParams>) -> Html<Str
         x_scale: Scale::Log10,
         y_scale: Scale::Log10,
         series: vec![
-            Series { name: "Total",   color: "#00d4ff", points: s_total },
-            Series { name: "Compute", color: "#22c55e", points: s_compute },
-            Series { name: "Weights", color: "#a855f7", points: s_weights },
-            Series { name: "KV",      color: "#f59e0b", points: s_kv },
+            Series {
+                name: "Total",
+                color: "#00d4ff",
+                points: s_total,
+            },
+            Series {
+                name: "Compute",
+                color: "#22c55e",
+                points: s_compute,
+            },
+            Series {
+                name: "Weights",
+                color: "#a855f7",
+                points: s_weights,
+            },
+            Series {
+                name: "KV",
+                color: "#f59e0b",
+                points: s_kv,
+            },
         ],
         markers,
     }
@@ -496,23 +700,67 @@ async fn context(headers: HeaderMap, Query(p): Query<ContextParams>) -> Html<Str
             format!("{:.2}×", kk[0] / ww[0].max(1e-12)),
         ]);
     }
-    let tbl = table(&["Context", "Total latency", "KV time", "KV / weights"], &rows);
+    let tbl = table(
+        &["Context", "Total latency", "KV time", "KV / weights"],
+        &rows,
+    );
 
     let form_html = form(
         "/context",
         &[
-            Field { name: "batch", label: "Batch size", hint: "Default 2000", value: fmt_f(batch, 0),
-                kind: FieldKind::Number { step: "100", min: Some("1") } },
-            Field { name: "n_active", label: "Active params", hint: "Default 37e9", value: fmt_num(n_active),
-                kind: FieldKind::Number { step: "1e9", min: Some("1e6") } },
-            Field { name: "n_total", label: "Total params", hint: "Default 700e9", value: fmt_num(n_total),
-                kind: FieldKind::Number { step: "1e9", min: Some("1e6") } },
-            Field { name: "bytes_per_param", label: "Bytes per param", hint: "FP8 = 1", value: fmt_f(bpp, 1),
+            Field {
+                name: "batch",
+                label: "Batch size",
+                hint: "Default 2000",
+                value: fmt_f(batch, 0),
+                kind: FieldKind::Number {
+                    step: "100",
+                    min: Some("1"),
+                },
+            },
+            Field {
+                name: "n_active",
+                label: "Active params",
+                hint: "Default 37e9",
+                value: fmt_num(n_active),
+                kind: FieldKind::Number {
+                    step: "1e9",
+                    min: Some("1e6"),
+                },
+            },
+            Field {
+                name: "n_total",
+                label: "Total params",
+                hint: "Default 700e9",
+                value: fmt_num(n_total),
+                kind: FieldKind::Number {
+                    step: "1e9",
+                    min: Some("1e6"),
+                },
+            },
+            Field {
+                name: "bytes_per_param",
+                label: "Bytes per param",
+                hint: "FP8 = 1",
+                value: fmt_f(bpp, 1),
                 kind: FieldKind::Select {
-                    options: &[("0.5", "FP4 (0.5)"), ("1.0", "FP8 (1.0)"), ("2.0", "FP16 (2.0)")],
-                } },
-            Field { name: "bytes_per_token", label: "KV bytes / token", hint: "Default 2048", value: fmt_f(bpt, 0),
-                kind: FieldKind::Number { step: "256", min: Some("1") } },
+                    options: &[
+                        ("0.5", "FP4 (0.5)"),
+                        ("1.0", "FP8 (1.0)"),
+                        ("2.0", "FP16 (2.0)"),
+                    ],
+                },
+            },
+            Field {
+                name: "bytes_per_token",
+                label: "KV bytes / token",
+                hint: "Default 2048",
+                value: fmt_f(bpt, 0),
+                kind: FieldKind::Number {
+                    step: "256",
+                    min: Some("1"),
+                },
+            },
         ],
     );
 
@@ -522,11 +770,21 @@ async fn context(headers: HeaderMap, Query(p): Query<ContextParams>) -> Html<Str
     let results = format!(
         "{s}{c}{t}",
         s = stats,
-        c = section("Latency vs context", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        c = section(
+            "Latency vs context",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         t = section("Sample contexts", &tbl),
     );
 
-    Html(respond(is_htmx(&headers), "Context", "/context", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "Context",
+        "/context",
+        intro,
+        &form_section,
+        &results,
+    ))
 }
 
 // =====================================================================
@@ -552,29 +810,62 @@ async fn agents_md(headers: HeaderMap, Query(p): Query<AgentsMdParams>) -> Html<
     let sizes: Vec<f64> = (0..200)
         .map(|i| 10.0_f64.powf(-1.0 + 3.0 * i as f64 / 199.0))
         .collect();
-    let passive: Vec<f64> = sizes.iter()
-        .map(|&s| physics::knowledge::agents_md_passive_effectiveness(s, optimal, sigma, ctx_window, tokens_kb, task))
+    let passive: Vec<f64> = sizes
+        .iter()
+        .map(|&s| {
+            physics::knowledge::agents_md_passive_effectiveness(
+                s, optimal, sigma, ctx_window, tokens_kb, task,
+            )
+        })
         .collect();
-    let active: Vec<f64> = sizes.iter()
+    let active: Vec<f64> = sizes
+        .iter()
         .map(|&s| physics::knowledge::agents_md_active_effectiveness(s, optimal, sigma * 1.5))
         .collect();
 
-    let (best_i, &best_v) = passive.iter().enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).unwrap();
+    let (best_i, &best_v) = passive
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .unwrap();
     let best_size = sizes[best_i];
 
     let pollution = physics::knowledge::agents_md_passive_effectiveness(
         500.0, optimal, sigma, ctx_window, tokens_kb, task,
     );
     let stats = stats_grid(&[
-        Stat::new("Optimal size", format!("{} KB", fmt_f(best_size, 2)), "Maximum passive effectiveness"),
-        Stat::new("Max success", format!("{:.0}%", best_v), "Passive (auto-injected) context"),
-        Stat::new("Active ceiling", format!("{:.0}%", active.iter().cloned().fold(0.0_f64, f64::max)), "Skills-based retrieval (Vercel: ~79%)"),
-        Stat::new("Pollution at 500 KB", format!("{:.0}%", pollution), "Context window flooded"),
+        Stat::new(
+            "Optimal size",
+            format!("{} KB", fmt_f(best_size, 2)),
+            "Maximum passive effectiveness",
+        ),
+        Stat::new(
+            "Max success",
+            format!("{:.0}%", best_v),
+            "Passive (auto-injected) context",
+        ),
+        Stat::new(
+            "Active ceiling",
+            format!("{:.0}%", active.iter().cloned().fold(0.0_f64, f64::max)),
+            "Skills-based retrieval (Vercel: ~79%)",
+        ),
+        Stat::new(
+            "Pollution at 500 KB",
+            format!("{:.0}%", pollution),
+            "Context window flooded",
+        ),
     ]);
 
-    let s_passive: Vec<(f64, f64)> = sizes.iter().zip(passive.iter()).map(|(&x, &y)| (x, y)).collect();
-    let s_active: Vec<(f64, f64)> = sizes.iter().zip(active.iter()).map(|(&x, &y)| (x, y)).collect();
+    let s_passive: Vec<(f64, f64)> = sizes
+        .iter()
+        .zip(passive.iter())
+        .map(|(&x, &y)| (x, y))
+        .collect();
+    let s_active: Vec<(f64, f64)> = sizes
+        .iter()
+        .zip(active.iter())
+        .map(|(&x, &y)| (x, y))
+        .collect();
 
     let opt_label = format!("optimal≈{:.1}KB", best_size);
     let chart = LineChart {
@@ -584,10 +875,23 @@ async fn agents_md(headers: HeaderMap, Query(p): Query<AgentsMdParams>) -> Html<
         x_scale: Scale::Log10,
         y_scale: Scale::Linear,
         series: vec![
-            Series { name: "Passive", color: "#00d4ff", points: s_passive },
-            Series { name: "Active",  color: "#a855f7", points: s_active },
+            Series {
+                name: "Passive",
+                color: "#00d4ff",
+                points: s_passive,
+            },
+            Series {
+                name: "Active",
+                color: "#a855f7",
+                points: s_active,
+            },
         ],
-        markers: vec![Marker { axis: Axis::X, value: best_size, label: &opt_label, color: "#22c55e" }],
+        markers: vec![Marker {
+            axis: Axis::X,
+            value: best_size,
+            label: &opt_label,
+            color: "#22c55e",
+        }],
     }
     .render();
 
@@ -595,8 +899,16 @@ async fn agents_md(headers: HeaderMap, Query(p): Query<AgentsMdParams>) -> Html<
     for sz in [0.5, 2.0, 8.0, 16.0, 50.0, 200.0, 500.0] {
         rows.push(vec![
             format!("{} KB", fmt_f(sz, 1)),
-            format!("{:.1}%", physics::knowledge::agents_md_passive_effectiveness(sz, optimal, sigma, ctx_window, tokens_kb, task)),
-            format!("{:.1}%", physics::knowledge::agents_md_active_effectiveness(sz, optimal, sigma * 1.5)),
+            format!(
+                "{:.1}%",
+                physics::knowledge::agents_md_passive_effectiveness(
+                    sz, optimal, sigma, ctx_window, tokens_kb, task
+                )
+            ),
+            format!(
+                "{:.1}%",
+                physics::knowledge::agents_md_active_effectiveness(sz, optimal, sigma * 1.5)
+            ),
             format!("{:.0}", sz * tokens_kb),
         ]);
     }
@@ -605,16 +917,56 @@ async fn agents_md(headers: HeaderMap, Query(p): Query<AgentsMdParams>) -> Html<
     let form_html = form(
         "/agents-md",
         &[
-            Field { name: "optimal_kb", label: "Optimal size (KB)", hint: "Vercel: ~8 KB", value: fmt_f(optimal, 1),
-                kind: FieldKind::Number { step: "0.5", min: Some("0.1") } },
-            Field { name: "sigma", label: "Sigma (KB)", hint: "Width of effectiveness peak", value: fmt_f(sigma, 2),
-                kind: FieldKind::Number { step: "0.1", min: Some("0.1") } },
-            Field { name: "context_window", label: "Context window (tokens)", hint: "e.g. 128k = 128000", value: fmt_f(ctx_window, 0),
-                kind: FieldKind::Number { step: "1000", min: Some("1000") } },
-            Field { name: "tokens_per_kb", label: "Tokens per KB", hint: "Markdown ≈ 150", value: fmt_f(tokens_kb, 0),
-                kind: FieldKind::Number { step: "10", min: Some("1") } },
-            Field { name: "task_complexity", label: "Task complexity (tokens)", hint: "Tokens already in context", value: fmt_f(task, 0),
-                kind: FieldKind::Number { step: "500", min: Some("0") } },
+            Field {
+                name: "optimal_kb",
+                label: "Optimal size (KB)",
+                hint: "Vercel: ~8 KB",
+                value: fmt_f(optimal, 1),
+                kind: FieldKind::Number {
+                    step: "0.5",
+                    min: Some("0.1"),
+                },
+            },
+            Field {
+                name: "sigma",
+                label: "Sigma (KB)",
+                hint: "Width of effectiveness peak",
+                value: fmt_f(sigma, 2),
+                kind: FieldKind::Number {
+                    step: "0.1",
+                    min: Some("0.1"),
+                },
+            },
+            Field {
+                name: "context_window",
+                label: "Context window (tokens)",
+                hint: "e.g. 128k = 128000",
+                value: fmt_f(ctx_window, 0),
+                kind: FieldKind::Number {
+                    step: "1000",
+                    min: Some("1000"),
+                },
+            },
+            Field {
+                name: "tokens_per_kb",
+                label: "Tokens per KB",
+                hint: "Markdown ≈ 150",
+                value: fmt_f(tokens_kb, 0),
+                kind: FieldKind::Number {
+                    step: "10",
+                    min: Some("1"),
+                },
+            },
+            Field {
+                name: "task_complexity",
+                label: "Task complexity (tokens)",
+                hint: "Tokens already in context",
+                value: fmt_f(task, 0),
+                kind: FieldKind::Number {
+                    step: "500",
+                    min: Some("0"),
+                },
+            },
         ],
     );
 
@@ -624,11 +976,21 @@ async fn agents_md(headers: HeaderMap, Query(p): Query<AgentsMdParams>) -> Html<
     let results = format!(
         "{s}{c}{t}",
         s = stats,
-        c = section("Effectiveness curve", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        c = section(
+            "Effectiveness curve",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         t = section("Sample sizes", &tbl),
     );
 
-    Html(respond(is_htmx(&headers), "AGENTS.md", "/agents-md", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "AGENTS.md",
+        "/agents-md",
+        intro,
+        &form_section,
+        &results,
+    ))
 }
 
 // =====================================================================
@@ -647,10 +1009,18 @@ async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<
     let max = p.max_agents.unwrap_or(100).clamp(2, 500);
 
     let xs: Vec<f64> = (1..=max).map(|n| n as f64).collect();
-    let s_eq: Vec<f64> = (1..=max).map(|n| effective_throughput(n, CoordinationStrategy::Equal)).collect();
-    let s_pi: Vec<f64> = (1..=max).map(|n| effective_throughput(n, CoordinationStrategy::Pipeline)).collect();
-    let s_co: Vec<f64> = (1..=max).map(|n| effective_throughput(n, CoordinationStrategy::Continuous)).collect();
-    let s_re: Vec<f64> = (1..=max).map(|n| effective_throughput(n, CoordinationStrategy::Recursive)).collect();
+    let s_eq: Vec<f64> = (1..=max)
+        .map(|n| effective_throughput(n, CoordinationStrategy::Equal))
+        .collect();
+    let s_pi: Vec<f64> = (1..=max)
+        .map(|n| effective_throughput(n, CoordinationStrategy::Pipeline))
+        .collect();
+    let s_co: Vec<f64> = (1..=max)
+        .map(|n| effective_throughput(n, CoordinationStrategy::Continuous))
+        .collect();
+    let s_re: Vec<f64> = (1..=max)
+        .map(|n| effective_throughput(n, CoordinationStrategy::Recursive))
+        .collect();
 
     let r_max = effective_throughput(max, CoordinationStrategy::Recursive);
     let e_max = effective_throughput(max, CoordinationStrategy::Equal);
@@ -658,15 +1028,30 @@ async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<
     let c_max = effective_throughput(max, CoordinationStrategy::Continuous);
 
     let stats = stats_grid(&[
-        Stat::new(format!("Recursive @ {}", max), fmt_f(r_max, 1), "Planner+Worker — wins"),
-        Stat::new(format!("Pipeline @ {}", max), fmt_f(p_max, 1), "Bottlenecked by slowest stage"),
-        Stat::new(format!("Continuous @ {}", max), fmt_f(c_max, 1), "Regresses past N≈10"),
-        Stat::new(format!("Equal @ {}", max), fmt_f(e_max, 1), "Lock contention collapse"),
+        Stat::new(
+            format!("Recursive @ {}", max),
+            fmt_f(r_max, 1),
+            "Planner+Worker — wins",
+        ),
+        Stat::new(
+            format!("Pipeline @ {}", max),
+            fmt_f(p_max, 1),
+            "Bottlenecked by slowest stage",
+        ),
+        Stat::new(
+            format!("Continuous @ {}", max),
+            fmt_f(c_max, 1),
+            "Regresses past N≈10",
+        ),
+        Stat::new(
+            format!("Equal @ {}", max),
+            fmt_f(e_max, 1),
+            "Lock contention collapse",
+        ),
     ]);
 
-    let pts = |v: &[f64]| -> Vec<(f64, f64)> {
-        xs.iter().zip(v.iter()).map(|(&x, &y)| (x, y)).collect()
-    };
+    let pts =
+        |v: &[f64]| -> Vec<(f64, f64)> { xs.iter().zip(v.iter()).map(|(&x, &y)| (x, y)).collect() };
     let chart = LineChart {
         title: "Effective throughput vs agent count",
         x_label: "Number of agents",
@@ -674,10 +1059,26 @@ async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<
         x_scale: Scale::Linear,
         y_scale: Scale::Linear,
         series: vec![
-            Series { name: "Recursive",  color: "#22c55e", points: pts(&s_re) },
-            Series { name: "Pipeline",   color: "#a855f7", points: pts(&s_pi) },
-            Series { name: "Continuous", color: "#f59e0b", points: pts(&s_co) },
-            Series { name: "Equal",      color: "#ef4444", points: pts(&s_eq) },
+            Series {
+                name: "Recursive",
+                color: "#22c55e",
+                points: pts(&s_re),
+            },
+            Series {
+                name: "Pipeline",
+                color: "#a855f7",
+                points: pts(&s_pi),
+            },
+            Series {
+                name: "Continuous",
+                color: "#f59e0b",
+                points: pts(&s_co),
+            },
+            Series {
+                name: "Equal",
+                color: "#ef4444",
+                points: pts(&s_eq),
+            },
         ],
         markers: vec![],
     }
@@ -685,7 +1086,9 @@ async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<
 
     let mut rows = vec![];
     for n in [1usize, 5, 10, 20, 50, 100] {
-        if n > max { continue; }
+        if n > max {
+            continue;
+        }
         rows.push(vec![
             n.to_string(),
             fmt_f(effective_throughput(n, CoordinationStrategy::Recursive), 2),
@@ -694,7 +1097,10 @@ async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<
             fmt_f(effective_throughput(n, CoordinationStrategy::Equal), 2),
         ]);
     }
-    let tbl = table(&["N agents", "Recursive", "Pipeline", "Continuous", "Equal"], &rows);
+    let tbl = table(
+        &["N agents", "Recursive", "Pipeline", "Continuous", "Equal"],
+        &rows,
+    );
 
     let form_html = form(
         "/coordination",
@@ -703,7 +1109,10 @@ async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<
             label: "Max agents to plot",
             hint: "Default 100",
             value: max.to_string(),
-            kind: FieldKind::Number { step: "10", min: Some("2") },
+            kind: FieldKind::Number {
+                step: "10",
+                min: Some("2"),
+            },
         }],
     );
 
@@ -713,11 +1122,21 @@ async fn coordination(headers: HeaderMap, Query(p): Query<CoordParams>) -> Html<
     let results = format!(
         "{s}{c}{t}",
         s = stats,
-        c = section("Coordination strategies", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        c = section(
+            "Coordination strategies",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         t = section("Sample sizes", &tbl),
     );
 
-    Html(respond(is_htmx(&headers), "Coordination", "/coordination", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "Coordination",
+        "/coordination",
+        intro,
+        &form_section,
+        &results,
+    ))
 }
 
 // =====================================================================
@@ -757,8 +1176,15 @@ async fn scaling(headers: HeaderMap, Query(p): Query<ScalingParams>) -> Html<Str
     let over = over_training_factor(pretrain_tokens, n_active);
     let chinchilla_tokens = 20.0 * n_active;
 
-    let (total, c_pt, c_rl, c_inf) =
-        total_cost(pretrain_tokens, pretrain_tokens, d_inf, n_active, &fpt, cpf, alpha);
+    let (total, c_pt, c_rl, c_inf) = total_cost(
+        pretrain_tokens,
+        pretrain_tokens,
+        d_inf,
+        n_active,
+        &fpt,
+        cpf,
+        alpha,
+    );
 
     // Sweep the ratio space for the chart so users can see the shape.
     let ratios = Array1::logspace(10.0, -2.0, 3.0, 200);
@@ -789,13 +1215,12 @@ async fn scaling(headers: HeaderMap, Query(p): Query<ScalingParams>) -> Html<Str
         Stat::new(
             "Pretrain tokens",
             fmt_eng(pretrain_tokens),
-            format!("Chinchilla optimum is {} (20×N)", fmt_eng(chinchilla_tokens)),
+            format!(
+                "Chinchilla optimum is {} (20×N)",
+                fmt_eng(chinchilla_tokens)
+            ),
         ),
-        Stat::new(
-            "Over-training",
-            format!("{:.1}×", over),
-            regime,
-        ),
+        Stat::new("Over-training", format!("{:.1}×", over), regime),
         Stat::new(
             "Inference tokens served",
             fmt_eng(d_inf),
@@ -812,37 +1237,114 @@ async fn scaling(headers: HeaderMap, Query(p): Query<ScalingParams>) -> Html<Str
         x_scale: Scale::Log10,
         y_scale: Scale::Log10,
         series: vec![
-            Series { name: "Total",     color: "#00d4ff", points: series_total },
-            Series { name: "Pretrain",  color: "#a855f7", points: series_pt },
-            Series { name: "Inference", color: "#22c55e", points: series_inf },
+            Series {
+                name: "Total",
+                color: "#00d4ff",
+                points: series_total,
+            },
+            Series {
+                name: "Pretrain",
+                color: "#a855f7",
+                points: series_pt,
+            },
+            Series {
+                name: "Inference",
+                color: "#22c55e",
+                points: series_inf,
+            },
         ],
-        markers: vec![Marker { axis: Axis::X, value: ratio, label: &mark_label, color: "#ec4899" }],
+        markers: vec![Marker {
+            axis: Axis::X,
+            value: ratio,
+            label: &mark_label,
+            color: "#ec4899",
+        }],
     }
     .render();
 
     let rows = vec![
-        vec!["Pretrain".into(),  fmt_usd(c_pt),  format!("{:.1}%", c_pt  / total * 100.0)],
-        vec!["RL".into(),        fmt_usd(c_rl),  format!("{:.1}%", c_rl  / total * 100.0)],
-        vec!["Inference".into(), fmt_usd(c_inf), format!("{:.1}%", c_inf / total * 100.0)],
-        vec!["Total".into(),     fmt_usd(total), "100.0%".into()],
+        vec![
+            "Pretrain".into(),
+            fmt_usd(c_pt),
+            format!("{:.1}%", c_pt / total * 100.0),
+        ],
+        vec![
+            "RL".into(),
+            fmt_usd(c_rl),
+            format!("{:.1}%", c_rl / total * 100.0),
+        ],
+        vec![
+            "Inference".into(),
+            fmt_usd(c_inf),
+            format!("{:.1}%", c_inf / total * 100.0),
+        ],
+        vec!["Total".into(), fmt_usd(total), "100.0%".into()],
     ];
     let tbl = table(&["Stage", "Cost", "Share"], &rows);
 
     let form_html = form(
         "/scaling",
         &[
-            Field { name: "n_active", label: "Active params", hint: "100B for frontier", value: fmt_num(n_active),
-                kind: FieldKind::Number { step: "1e9", min: Some("1e6") } },
-            Field { name: "tokens_per_sec", label: "Tokens/sec served", hint: "Default 50M", value: fmt_num(tps),
-                kind: FieldKind::Number { step: "1e6", min: Some("1") } },
-            Field { name: "months", label: "Months running", hint: "Default 2", value: fmt_f(months, 1),
-                kind: FieldKind::Number { step: "0.5", min: Some("0.1") } },
-            Field { name: "ratio", label: "Pretrain:inference ratio", hint: "How many tokens per inference token (1–1000)", value: fmt_f(ratio, 2),
-                kind: FieldKind::Number { step: "5", min: Some("0.01") } },
-            Field { name: "alpha_rl", label: "RL inefficiency α", hint: "Default 0.5", value: fmt_f(alpha, 2),
-                kind: FieldKind::Number { step: "0.1", min: Some("0") } },
-            Field { name: "cost_per_flop", label: "Cost per FLOP", hint: "Default 1e-15", value: fmt_num(cpf),
-                kind: FieldKind::Number { step: "1e-16", min: Some("1e-20") } },
+            Field {
+                name: "n_active",
+                label: "Active params",
+                hint: "100B for frontier",
+                value: fmt_num(n_active),
+                kind: FieldKind::Number {
+                    step: "1e9",
+                    min: Some("1e6"),
+                },
+            },
+            Field {
+                name: "tokens_per_sec",
+                label: "Tokens/sec served",
+                hint: "Default 50M",
+                value: fmt_num(tps),
+                kind: FieldKind::Number {
+                    step: "1e6",
+                    min: Some("1"),
+                },
+            },
+            Field {
+                name: "months",
+                label: "Months running",
+                hint: "Default 2",
+                value: fmt_f(months, 1),
+                kind: FieldKind::Number {
+                    step: "0.5",
+                    min: Some("0.1"),
+                },
+            },
+            Field {
+                name: "ratio",
+                label: "Pretrain:inference ratio",
+                hint: "How many tokens per inference token (1–1000)",
+                value: fmt_f(ratio, 2),
+                kind: FieldKind::Number {
+                    step: "5",
+                    min: Some("0.01"),
+                },
+            },
+            Field {
+                name: "alpha_rl",
+                label: "RL inefficiency α",
+                hint: "Default 0.5",
+                value: fmt_f(alpha, 2),
+                kind: FieldKind::Number {
+                    step: "0.1",
+                    min: Some("0"),
+                },
+            },
+            Field {
+                name: "cost_per_flop",
+                label: "Cost per FLOP",
+                hint: "Default 1e-15",
+                value: fmt_num(cpf),
+                kind: FieldKind::Number {
+                    step: "1e-16",
+                    min: Some("1e-20"),
+                },
+            },
         ],
     );
 
@@ -852,10 +1354,20 @@ async fn scaling(headers: HeaderMap, Query(p): Query<ScalingParams>) -> Html<Str
     let results = format!(
         "{s}{c}{t}",
         s = stats,
-        c = section("Cost decomposition", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        c = section(
+            "Cost decomposition",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         t = section("Cost breakdown at chosen ratio", &tbl),
     );
-    Html(respond(is_htmx(&headers), "Scaling", "/scaling", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "Scaling",
+        "/scaling",
+        intro,
+        &form_section,
+        &results,
+    ))
 }
 
 // =====================================================================
@@ -884,15 +1396,35 @@ async fn pricing(headers: HeaderMap, Query(p): Query<PricingParams>) -> Html<Str
     let hours: Vec<f64> = (0..n)
         .map(|i| 10.0_f64.powf((max_h.log10() - 0.0) * i as f64 / (n - 1) as f64))
         .collect();
-    let oa_costs: Vec<f64> = hours.iter().map(|&h| openai_total_cost(h, oa_h, tph, mpm)).collect();
-    let an_costs: Vec<f64> = hours.iter().map(|&h| anthropic_total_cost(h, an_h, tph, mpm)).collect();
+    let oa_costs: Vec<f64> = hours
+        .iter()
+        .map(|&h| openai_total_cost(h, oa_h, tph, mpm))
+        .collect();
+    let an_costs: Vec<f64> = hours
+        .iter()
+        .map(|&h| anthropic_total_cost(h, an_h, tph, mpm))
+        .collect();
 
     let break_even = find_break_even(&hours, &oa_costs, &an_costs);
 
     let stats = stats_grid(&[
-        Stat::new("OpenAI @ 100h", fmt_usd(openai_total_cost(100.0, oa_h, tph, mpm)), "sandbox + model"),
-        Stat::new("Anthropic @ 100h", fmt_usd(anthropic_total_cost(100.0, an_h, tph, mpm)), "harness + model"),
-        Stat::new("Break-even", break_even.map(|h| format!("{} h", fmt_f(h, 1))).unwrap_or_else(|| "none in range".into()), "Where curves cross"),
+        Stat::new(
+            "OpenAI @ 100h",
+            fmt_usd(openai_total_cost(100.0, oa_h, tph, mpm)),
+            "sandbox + model",
+        ),
+        Stat::new(
+            "Anthropic @ 100h",
+            fmt_usd(anthropic_total_cost(100.0, an_h, tph, mpm)),
+            "harness + model",
+        ),
+        Stat::new(
+            "Break-even",
+            break_even
+                .map(|h| format!("{} h", fmt_f(h, 1)))
+                .unwrap_or_else(|| "none in range".into()),
+            "Where curves cross",
+        ),
         Stat::new("Model $/M tokens", fmt_usd(mpm), "Inference rate"),
     ]);
 
@@ -903,10 +1435,24 @@ async fn pricing(headers: HeaderMap, Query(p): Query<PricingParams>) -> Html<Str
         x_scale: Scale::Log10,
         y_scale: Scale::Log10,
         series: vec![
-            Series { name: "OpenAI (sandbox)", color: "#00d4ff",
-                     points: hours.iter().zip(oa_costs.iter()).map(|(&x,&y)| (x,y)).collect() },
-            Series { name: "Anthropic (MCP)",  color: "#a855f7",
-                     points: hours.iter().zip(an_costs.iter()).map(|(&x,&y)| (x,y)).collect() },
+            Series {
+                name: "OpenAI (sandbox)",
+                color: "#00d4ff",
+                points: hours
+                    .iter()
+                    .zip(oa_costs.iter())
+                    .map(|(&x, &y)| (x, y))
+                    .collect(),
+            },
+            Series {
+                name: "Anthropic (MCP)",
+                color: "#a855f7",
+                points: hours
+                    .iter()
+                    .zip(an_costs.iter())
+                    .map(|(&x, &y)| (x, y))
+                    .collect(),
+            },
         ],
         markers: vec![],
     }
@@ -914,12 +1460,18 @@ async fn pricing(headers: HeaderMap, Query(p): Query<PricingParams>) -> Html<Str
 
     let mut rows = vec![];
     for h in [1.0, 10.0, 100.0, 1000.0, 10000.0] {
-        if h > max_h { continue; }
+        if h > max_h {
+            continue;
+        }
         rows.push(vec![
             fmt_f(h, 0),
             fmt_usd(openai_total_cost(h, oa_h, tph, mpm)),
             fmt_usd(anthropic_total_cost(h, an_h, tph, mpm)),
-            fmt_f(openai_total_cost(h, oa_h, tph, mpm) / anthropic_total_cost(h, an_h, tph, mpm).max(1e-12), 2),
+            fmt_f(
+                openai_total_cost(h, oa_h, tph, mpm)
+                    / anthropic_total_cost(h, an_h, tph, mpm).max(1e-12),
+                2,
+            ),
         ]);
     }
     let tbl = table(&["Hours", "OpenAI", "Anthropic", "OA / Anth"], &rows);
@@ -927,16 +1479,56 @@ async fn pricing(headers: HeaderMap, Query(p): Query<PricingParams>) -> Html<Str
     let form_html = form(
         "/pricing",
         &[
-            Field { name: "sandbox_per_hour", label: "OpenAI sandbox $/h", hint: "Default 0.50", value: fmt_f(oa_h, 2),
-                kind: FieldKind::Number { step: "0.05", min: Some("0") } },
-            Field { name: "anthropic_per_hour", label: "Anthropic harness $/h", hint: "Default 0.08", value: fmt_f(an_h, 2),
-                kind: FieldKind::Number { step: "0.01", min: Some("0") } },
-            Field { name: "tokens_per_hour", label: "Tokens / hour", hint: "Default 50,000", value: fmt_f(tph, 0),
-                kind: FieldKind::Number { step: "1000", min: Some("0") } },
-            Field { name: "model_per_million", label: "Model $ / M tok", hint: "Default 0.50", value: fmt_f(mpm, 2),
-                kind: FieldKind::Number { step: "0.10", min: Some("0") } },
-            Field { name: "max_hours", label: "Max hours to plot", hint: "Default 1000", value: fmt_f(max_h, 0),
-                kind: FieldKind::Number { step: "100", min: Some("10") } },
+            Field {
+                name: "sandbox_per_hour",
+                label: "OpenAI sandbox $/h",
+                hint: "Default 0.50",
+                value: fmt_f(oa_h, 2),
+                kind: FieldKind::Number {
+                    step: "0.05",
+                    min: Some("0"),
+                },
+            },
+            Field {
+                name: "anthropic_per_hour",
+                label: "Anthropic harness $/h",
+                hint: "Default 0.08",
+                value: fmt_f(an_h, 2),
+                kind: FieldKind::Number {
+                    step: "0.01",
+                    min: Some("0"),
+                },
+            },
+            Field {
+                name: "tokens_per_hour",
+                label: "Tokens / hour",
+                hint: "Default 50,000",
+                value: fmt_f(tph, 0),
+                kind: FieldKind::Number {
+                    step: "1000",
+                    min: Some("0"),
+                },
+            },
+            Field {
+                name: "model_per_million",
+                label: "Model $ / M tok",
+                hint: "Default 0.50",
+                value: fmt_f(mpm, 2),
+                kind: FieldKind::Number {
+                    step: "0.10",
+                    min: Some("0"),
+                },
+            },
+            Field {
+                name: "max_hours",
+                label: "Max hours to plot",
+                hint: "Default 1000",
+                value: fmt_f(max_h, 0),
+                kind: FieldKind::Number {
+                    step: "100",
+                    min: Some("10"),
+                },
+            },
         ],
     );
 
@@ -946,11 +1538,21 @@ async fn pricing(headers: HeaderMap, Query(p): Query<PricingParams>) -> Html<Str
     let results = format!(
         "{s}{c}{t}",
         s = stats,
-        c = section("Cost curves", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        c = section(
+            "Cost curves",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         t = section("Sample hours", &tbl),
     );
 
-    Html(respond(is_htmx(&headers), "Pricing", "/pricing", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "Pricing",
+        "/pricing",
+        intro,
+        &form_section,
+        &results,
+    ))
 }
 
 // =====================================================================
@@ -985,9 +1587,25 @@ async fn throughput(headers: HeaderMap, Query(p): Query<ThroughputParams>) -> Ht
     let speedup = throughput_speedup(prs, rh, nr, er, tr, af);
 
     let stats = stats_grid(&[
-        Stat::new("Blocking: merged", fmt_f(b_clean, 1), format!("Stuck in queue: {}", fmt_f(b_stuck, 1))),
-        Stat::new("Minimal: merged", fmt_f(mb_merged, 1), format!("Auto-fixed: {}, remaining: {}", fmt_f(mb_fixed, 1), fmt_f(mb_remaining, 1))),
-        Stat::new("Net healthy/day", fmt_f(net_fast, 1), "merged − unfixed errors"),
+        Stat::new(
+            "Blocking: merged",
+            fmt_f(b_clean, 1),
+            format!("Stuck in queue: {}", fmt_f(b_stuck, 1)),
+        ),
+        Stat::new(
+            "Minimal: merged",
+            fmt_f(mb_merged, 1),
+            format!(
+                "Auto-fixed: {}, remaining: {}",
+                fmt_f(mb_fixed, 1),
+                fmt_f(mb_remaining, 1)
+            ),
+        ),
+        Stat::new(
+            "Net healthy/day",
+            fmt_f(net_fast, 1),
+            "merged − unfixed errors",
+        ),
         Stat::new("Speedup", format!("{:.1}×", speedup), "minimal vs blocking"),
     ]);
 
@@ -1007,29 +1625,97 @@ async fn throughput(headers: HeaderMap, Query(p): Query<ThroughputParams>) -> Ht
 
     let rows = vec![
         vec!["Total submitted".into(), fmt_f(prs, 1), "—".into()],
-        vec!["Blocking merged".into(), fmt_f(b_clean, 1), format!("{:.1}%", 100.0 * b_clean / prs)],
-        vec!["Blocking stuck in queue".into(), fmt_f(b_stuck, 1), format!("{:.1}%", 100.0 * b_stuck / prs)],
-        vec!["Minimal: merged".into(), fmt_f(mb_merged, 1), format!("{:.1}%", 100.0 * mb_merged / prs)],
-        vec!["Minimal: auto-fixed".into(), fmt_f(mb_fixed, 1), format!("{:.1}%", 100.0 * mb_fixed / prs)],
-        vec!["Minimal: remaining errors".into(), fmt_f(mb_remaining, 1), format!("{:.1}%", 100.0 * mb_remaining / prs)],
+        vec![
+            "Blocking merged".into(),
+            fmt_f(b_clean, 1),
+            format!("{:.1}%", 100.0 * b_clean / prs),
+        ],
+        vec![
+            "Blocking stuck in queue".into(),
+            fmt_f(b_stuck, 1),
+            format!("{:.1}%", 100.0 * b_stuck / prs),
+        ],
+        vec![
+            "Minimal: merged".into(),
+            fmt_f(mb_merged, 1),
+            format!("{:.1}%", 100.0 * mb_merged / prs),
+        ],
+        vec![
+            "Minimal: auto-fixed".into(),
+            fmt_f(mb_fixed, 1),
+            format!("{:.1}%", 100.0 * mb_fixed / prs),
+        ],
+        vec![
+            "Minimal: remaining errors".into(),
+            fmt_f(mb_remaining, 1),
+            format!("{:.1}%", 100.0 * mb_remaining / prs),
+        ],
     ];
     let tbl = table(&["Outcome", "PRs/day", "Share"], &rows);
 
     let form_html = form(
         "/throughput",
         &[
-            Field { name: "prs_per_day", label: "PRs / day", hint: "Default 100", value: fmt_f(prs, 0),
-                kind: FieldKind::Number { step: "10", min: Some("1") } },
-            Field { name: "review_hours_per_pr", label: "Review hours / PR", hint: "Default 4", value: fmt_f(rh, 1),
-                kind: FieldKind::Number { step: "0.5", min: Some("0.1") } },
-            Field { name: "num_reviewers", label: "Reviewers", hint: "Default 3", value: nr.to_string(),
-                kind: FieldKind::Number { step: "1", min: Some("1") } },
-            Field { name: "error_rate", label: "Error rate", hint: "0–1, default 0.05", value: fmt_f(er, 3),
-                kind: FieldKind::Number { step: "0.01", min: Some("0") } },
-            Field { name: "test_pass_rate", label: "Test pass rate", hint: "0–1, default 0.95", value: fmt_f(tr, 3),
-                kind: FieldKind::Number { step: "0.01", min: Some("0") } },
-            Field { name: "auto_fix_success", label: "Auto-fix success", hint: "0–1, default 0.80", value: fmt_f(af, 3),
-                kind: FieldKind::Number { step: "0.01", min: Some("0") } },
+            Field {
+                name: "prs_per_day",
+                label: "PRs / day",
+                hint: "Default 100",
+                value: fmt_f(prs, 0),
+                kind: FieldKind::Number {
+                    step: "10",
+                    min: Some("1"),
+                },
+            },
+            Field {
+                name: "review_hours_per_pr",
+                label: "Review hours / PR",
+                hint: "Default 4",
+                value: fmt_f(rh, 1),
+                kind: FieldKind::Number {
+                    step: "0.5",
+                    min: Some("0.1"),
+                },
+            },
+            Field {
+                name: "num_reviewers",
+                label: "Reviewers",
+                hint: "Default 3",
+                value: nr.to_string(),
+                kind: FieldKind::Number {
+                    step: "1",
+                    min: Some("1"),
+                },
+            },
+            Field {
+                name: "error_rate",
+                label: "Error rate",
+                hint: "0–1, default 0.05",
+                value: fmt_f(er, 3),
+                kind: FieldKind::Number {
+                    step: "0.01",
+                    min: Some("0"),
+                },
+            },
+            Field {
+                name: "test_pass_rate",
+                label: "Test pass rate",
+                hint: "0–1, default 0.95",
+                value: fmt_f(tr, 3),
+                kind: FieldKind::Number {
+                    step: "0.01",
+                    min: Some("0"),
+                },
+            },
+            Field {
+                name: "auto_fix_success",
+                label: "Auto-fix success",
+                hint: "0–1, default 0.80",
+                value: fmt_f(af, 3),
+                kind: FieldKind::Number {
+                    step: "0.01",
+                    min: Some("0"),
+                },
+            },
         ],
     );
 
@@ -1039,9 +1725,19 @@ async fn throughput(headers: HeaderMap, Query(p): Query<ThroughputParams>) -> Ht
     let results = format!(
         "{s}{c}{t}",
         s = stats,
-        c = section("Outcome breakdown", &format!(r#"<div class="chart">{}</div>"#, chart)),
+        c = section(
+            "Outcome breakdown",
+            &format!(r#"<div class="chart">{}</div>"#, chart)
+        ),
         t = section("Per-outcome details", &tbl),
     );
 
-    Html(respond(is_htmx(&headers), "Throughput", "/throughput", intro, &form_section, &results))
+    Html(respond(
+        is_htmx(&headers),
+        "Throughput",
+        "/throughput",
+        intro,
+        &form_section,
+        &results,
+    ))
 }

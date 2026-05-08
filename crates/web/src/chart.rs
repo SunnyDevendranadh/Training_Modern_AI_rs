@@ -82,7 +82,11 @@ fn data_range(values: impl Iterator<Item = f64>, scale: Scale) -> (f64, f64) {
         return (0.0, 1.0);
     }
     if (hi - lo).abs() < f64::EPSILON {
-        let pad = if hi.abs() < f64::EPSILON { 1.0 } else { hi.abs() * 0.1 };
+        let pad = if hi.abs() < f64::EPSILON {
+            1.0
+        } else {
+            hi.abs() * 0.1
+        };
         return (lo - pad, hi + pad);
     }
     let pad = (hi - lo) * 0.05;
@@ -144,8 +148,14 @@ impl<'a> LineChart<'a> {
         let plot_w = W - PAD_L - PAD_R;
         let plot_h = H - PAD_T - PAD_B;
 
-        let all_x = self.series.iter().flat_map(|s| s.points.iter().map(|(x, _)| *x));
-        let all_y = self.series.iter().flat_map(|s| s.points.iter().map(|(_, y)| *y));
+        let all_x = self
+            .series
+            .iter()
+            .flat_map(|s| s.points.iter().map(|(x, _)| *x));
+        let all_y = self
+            .series
+            .iter()
+            .flat_map(|s| s.points.iter().map(|(_, y)| *y));
         let (x_lo, x_hi) = data_range(all_x, self.x_scale);
         let (y_lo, y_hi) = data_range(all_y, self.y_scale);
 
@@ -165,7 +175,11 @@ impl<'a> LineChart<'a> {
             H = H as i64,
             title = html_escape(self.title),
         );
-        let _ = write!(s, r##"<rect width="{}" height="{}" fill="#0f1117"/>"##, W as i64, H as i64);
+        let _ = write!(
+            s,
+            r##"<rect width="{}" height="{}" fill="#0f1117"/>"##,
+            W as i64, H as i64
+        );
 
         // Title
         let _ = write!(
@@ -372,7 +386,11 @@ impl<'a> BarChart<'a> {
             H = H as i64,
             title = html_escape(self.title),
         );
-        let _ = write!(s, r##"<rect width="{}" height="{}" fill="#0f1117"/>"##, W as i64, H as i64);
+        let _ = write!(
+            s,
+            r##"<rect width="{}" height="{}" fill="#0f1117"/>"##,
+            W as i64, H as i64
+        );
         let _ = write!(
             s,
             r##"<text x="{cx}" y="18" text-anchor="middle" fill="#e0e0e0" font-family="system-ui, sans-serif" font-size="14" font-weight="600">{t}</text>"##,

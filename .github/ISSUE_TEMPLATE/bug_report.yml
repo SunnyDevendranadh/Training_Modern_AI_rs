@@ -1,0 +1,50 @@
+name: Bug report
+description: Something is broken or shows the wrong number.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For **security vulnerabilities**, please use the [private vulnerability report](https://github.com/SunnyDevendranadh/Training_Modern_AI_rs/security/advisories/new) instead of this form.
+
+  - type: input
+    id: command
+    attributes:
+      label: Command / URL
+      description: Full command you ran, or full URL (including query string) if it is a web page issue.
+      placeholder: "cargo run -p web  →  http://127.0.0.1:2718/roofline?batch=1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What you expected to see (include the formula and hand-derived value if it is a physics bug).
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What you actually saw. Screenshots or copied text are welcome.
+    validations:
+      required: true
+
+  - type: input
+    id: rust-version
+    attributes:
+      label: Rust version
+      placeholder: "rustc 1.78.0 (9b00956e5 2024-04-29)"
+      description: Output of `rustc --version`
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Ubuntu 22.04 / macOS 14 / Windows 11"
+    validations:
+      required: true

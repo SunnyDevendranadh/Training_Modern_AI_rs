@@ -37,7 +37,7 @@ pub fn total_cost(
     n_active: f64,
     flops_per_token: &FlopsPerToken,
     cost_per_flop: f64,
-    alpha_rl: f64,       // RL inefficiency factor
+    alpha_rl: f64, // RL inefficiency factor
 ) -> (f64, f64, f64, f64) {
     let c_pretrain = d_pretrain * n_active * flops_per_token.pretrain * cost_per_flop;
     let c_rl = alpha_rl * d_rl * n_active * flops_per_token.rl * cost_per_flop;
@@ -65,8 +65,13 @@ pub fn optimal_pretrain_ratio(
         let d_pretrain = ratio * d_inference;
         let d_rl = d_pretrain; // assume RL tokens ≈ pretrain tokens
         let (total, _, _, _) = total_cost(
-            d_pretrain, d_rl, d_inference, n_active,
-            flops_per_token, cost_per_flop, alpha_rl,
+            d_pretrain,
+            d_rl,
+            d_inference,
+            n_active,
+            flops_per_token,
+            cost_per_flop,
+            alpha_rl,
         );
         if total < min_cost {
             min_cost = total;
@@ -87,10 +92,7 @@ pub fn over_training_factor(pretrain_tokens: f64, n_active: f64) -> f64 {
 }
 
 /// Compute inference volume from throughput and duration.
-pub fn inference_tokens_served(
-    tokens_per_second: f64,
-    months: f64,
-) -> f64 {
+pub fn inference_tokens_served(tokens_per_second: f64, months: f64) -> f64 {
     let seconds = months * 30.0 * 24.0 * 3600.0;
     tokens_per_second * seconds
 }
@@ -103,7 +105,13 @@ mod tests {
     #[test]
     fn cost_components_sum_to_total() {
         let (total, pt, rl, inf) = total_cost(
-            1e12, 1e12, 1e15, 100e9, &FlopsPerToken::default(), 1e-15, 0.5,
+            1e12,
+            1e12,
+            1e15,
+            100e9,
+            &FlopsPerToken::default(),
+            1e-15,
+            0.5,
         );
         assert_relative_eq!(pt + rl + inf, total, epsilon = 1e-9);
     }
@@ -111,7 +119,13 @@ mod tests {
     #[test]
     fn pretrain_cost_dominates_at_high_ratio() {
         let (_, pt, rl, inf) = total_cost(
-            1e15, 1e14, 1e13, 100e9, &FlopsPerToken::default(), 1e-15, 0.5,
+            1e15,
+            1e14,
+            1e13,
+            100e9,
+            &FlopsPerToken::default(),
+            1e-15,
+            0.5,
         );
         assert!(pt > rl);
         assert!(pt > inf);
@@ -120,7 +134,13 @@ mod tests {
     #[test]
     fn inference_cost_dominates_at_high_volume() {
         let (_, pt, _, inf) = total_cost(
-            1e12, 1e12, 1e18, 100e9, &FlopsPerToken::default(), 1e-15, 0.5,
+            1e12,
+            1e12,
+            1e18,
+            100e9,
+            &FlopsPerToken::default(),
+            1e-15,
+            0.5,
         );
         assert!(inf > pt);
     }
@@ -130,9 +150,8 @@ mod tests {
         let d_inf = 50e6 * 60.0 * 60.0 * 24.0 * 60.0; // 2 months at 50M tok/s
         let ratios = Array1::logspace(10.0, -2.0, 2.0, 400);
 
-        let (idx, opt) = optimal_pretrain_ratio(
-            d_inf, 100e9, &FlopsPerToken::default(), 1e-15, 0.5, &ratios,
-        );
+        let (idx, opt) =
+            optimal_pretrain_ratio(d_inf, 100e9, &FlopsPerToken::default(), 1e-15, 0.5, &ratios);
         // Optimal ratio should be in the range — pretraining is needed
         // even though pure cost minimization would say zero
         assert!(opt > 0.0, "optimal ratio should be positive");

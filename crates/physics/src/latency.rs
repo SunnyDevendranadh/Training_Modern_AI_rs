@@ -26,11 +26,7 @@ use crate::constants;
 ///
 /// # Returns
 /// Latency in seconds.
-pub fn t_compute(
-    batch_size: &Array1<f64>,
-    n_active: f64,
-    flops: f64,
-) -> Array1<f64> {
+pub fn t_compute(batch_size: &Array1<f64>, n_active: f64, flops: f64) -> Array1<f64> {
     batch_size.mapv(|bs| bs * n_active * constants::FLOPS_PER_MAC / flops)
 }
 
@@ -79,6 +75,7 @@ pub fn t_mem_kv(
 /// Total latency: `max(t_compute, t_mem_weights + t_mem_kv)`.
 ///
 /// Returns a tuple of `(total, t_compute, t_mem_weights, t_mem_kv)`.
+#[allow(clippy::too_many_arguments)]
 pub fn total_latency(
     batch_size: &Array1<f64>,
     n_active: f64,
@@ -106,6 +103,7 @@ pub fn total_latency(
 ///
 /// This is the "ridge point" of the roofline. Below it you're memory-bound;
 /// above it you're compute-bound.
+#[allow(clippy::too_many_arguments)]
 pub fn find_balance_point(
     batch_sizes: &Array1<f64>,
     n_active: f64,
@@ -117,8 +115,14 @@ pub fn find_balance_point(
     mem_bw: f64,
 ) -> (usize, f64, f64) {
     let (_, tc, tw, tk) = total_latency(
-        batch_sizes, n_active, n_total, context_length,
-        bytes_per_param, bpt, flops, mem_bw,
+        batch_sizes,
+        n_active,
+        n_total,
+        context_length,
+        bytes_per_param,
+        bpt,
+        flops,
+        mem_bw,
     );
     let tm = &tw + &tk;
     let diff = (&tc - &tm).mapv(|d| d.abs());
@@ -136,18 +140,18 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
     use constants::{
-        BYTES_PER_PARAM_FP4, BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, CONTEXT_LENGTH,
-        FLOPS, MEM_BW, N_ACTIVE, N_TOTAL,
+        BYTES_PER_PARAM_FP4, BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, CONTEXT_LENGTH, FLOPS, MEM_BW,
+        N_ACTIVE, N_TOTAL,
     };
     use ndarray::arr1;
 
     // Helper: create an array of batch sizes from single values
     fn bs(vals: &[f64]) -> Array1<f64> {
-        arr1(vals).mapv(|v| v as f64)
+        arr1(vals)
     }
 
     fn ctx_vals(vals: &[f64]) -> Array1<f64> {
-        arr1(vals).mapv(|v| v as f64)
+        arr1(vals)
     }
 
     #[test]
@@ -199,7 +203,10 @@ mod tests {
 
         // 32× longer context should give 32× longer KV time
         let ratio = t_long[0] / t_short[0];
-        assert!((ratio - 32.0).abs() < 1.0, "ratio should be ~32, got {ratio}");
+        assert!(
+            (ratio - 32.0).abs() < 1.0,
+            "ratio should be ~32, got {ratio}"
+        );
     }
 
     #[test]
@@ -207,8 +214,14 @@ mod tests {
         let b = bs(&[1.0]);
         let ctx = ctx_vals(&[CONTEXT_LENGTH]);
         let (total, tc, tw, tk) = total_latency(
-            &b, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW,
+            &b,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
         );
         let tm = tw[0] + tk[0];
         // At batch=1, memory time should dominate
@@ -221,11 +234,20 @@ mod tests {
         let b = bs(&[100_000.0]);
         let ctx = ctx_vals(&[1024.0]); // short context
         let (_total, tc, tw, tk) = total_latency(
-            &b, N_ACTIVE, N_TOTAL, &ctx,
-            0.1, 256.0, FLOPS, MEM_BW / 10.0, // make memory very fast
+            &b,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            0.1,
+            256.0,
+            FLOPS,
+            MEM_BW / 10.0, // make memory very fast
         );
         // With these params, compute should dominate at large batch
-        assert!(tc[0] > tw[0] + tk[0], "should be compute-bound at large batch");
+        assert!(
+            tc[0] > tw[0] + tk[0],
+            "should be compute-bound at large batch"
+        );
     }
 
     #[test]
@@ -234,8 +256,14 @@ mod tests {
         let ctx = Array1::from_elem(200, CONTEXT_LENGTH);
 
         let (idx, bs, lat) = find_balance_point(
-            &batch_sizes, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW,
+            &batch_sizes,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
         );
 
         assert!(idx > 0, "balance point should not be at first element");
@@ -250,8 +278,14 @@ mod tests {
         let b = bs(&[1.0, 10.0, 100.0, 1000.0, 10000.0]);
         let ctx = ctx_vals(&[CONTEXT_LENGTH; 5]);
         let (total, tc, tw, tk) = total_latency(
-            &b, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW,
+            &b,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
         );
 
         for i in 0..5 {
@@ -267,8 +301,14 @@ mod tests {
         let b = bs(&[2000.0]);
         let ctx = ctx_vals(&[CONTEXT_LENGTH]);
         let (total, tc, tw, tk) = total_latency(
-            &b, N_ACTIVE, N_TOTAL, &ctx,
-            BYTES_PER_PARAM_FP8, BYTES_PER_TOKEN, FLOPS, MEM_BW,
+            &b,
+            N_ACTIVE,
+            N_TOTAL,
+            &ctx,
+            BYTES_PER_PARAM_FP8,
+            BYTES_PER_TOKEN,
+            FLOPS,
+            MEM_BW,
         );
 
         // With defaults, memory should dominate at 32K context / 2K batch

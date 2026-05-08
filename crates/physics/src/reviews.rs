@@ -110,10 +110,17 @@ mod tests {
     #[test]
     fn full_pipeline_high_detection() {
         let result = simulate_review_pipeline(1000, 0.70, 0.55, 0.65, 0.05, 0.08);
-        let full_idx = result.stages.iter().position(|s| s == "Self → Cross → Human").unwrap();
+        let full_idx = result
+            .stages
+            .iter()
+            .position(|s| s == "Self → Cross → Human")
+            .unwrap();
         // Full pipeline should have > 90% detection
         let detection_pct = result.errors_caught[full_idx] as f64 / 1000.0 * 100.0;
-        assert!(detection_pct > 90.0, "full pipeline should be > 90% detection, got {detection_pct}%");
+        assert!(
+            detection_pct > 90.0,
+            "full pipeline should be > 90% detection, got {detection_pct}%"
+        );
     }
 
     #[test]

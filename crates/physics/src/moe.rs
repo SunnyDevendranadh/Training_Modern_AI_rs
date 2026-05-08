@@ -70,9 +70,16 @@ pub fn load_balance_stats(routing: &Array2<i32>) -> LoadBalanceStats {
 
     let n = expert_counts.len() as f64;
     let avg = expert_counts.iter().sum::<f64>() / n;
-    let max_val = expert_counts.iter().cloned().fold(f64::NEG_INFINITY, f64::max) as i32;
+    let max_val = expert_counts
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max) as i32;
     let min_val = expert_counts.iter().cloned().fold(f64::INFINITY, f64::min) as i32;
-    let variance = expert_counts.iter().map(|&x| (x - avg).powi(2)).sum::<f64>() / n;
+    let variance = expert_counts
+        .iter()
+        .map(|&x| (x - avg).powi(2))
+        .sum::<f64>()
+        / n;
     let cv = variance.sqrt() / avg.max(1e-9);
 
     LoadBalanceStats {
@@ -86,8 +93,8 @@ pub fn load_balance_stats(routing: &Array2<i32>) -> LoadBalanceStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::SeedableRng;
     use rand::rngs::StdRng;
+    use rand::SeedableRng;
 
     #[test]
     fn route_tokens_gives_correct_shape() {
@@ -124,8 +131,11 @@ mod tests {
         assert!(stats.avg_tokens_per_expert > 0.0);
         assert!(stats.coefficient_of_variation >= 0.0);
         // With random routing and enough tokens, CV should be small
-        assert!(stats.coefficient_of_variation < 0.5,
-            "CV should be < 0.5 for uniform random, got {:.3}", stats.coefficient_of_variation);
+        assert!(
+            stats.coefficient_of_variation < 0.5,
+            "CV should be < 0.5 for uniform random, got {:.3}",
+            stats.coefficient_of_variation
+        );
     }
 
     #[test]

@@ -70,6 +70,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn constants_are_positive() {
         assert!(FLOPS > 0.0);
         assert!(MEM_BW > 0.0);
@@ -81,6 +82,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn n_active_less_than_n_total_for_sparse_model() {
         assert!(N_ACTIVE < N_TOTAL);
     }
