@@ -1,6 +1,6 @@
 # AGENTS.md — Training Modern AI (Rust Edition)
 
-Single source of truth for AI agents working on this repo.
+Single source of truth for AI agents working in this repo.
 
 ---
 
